@@ -10,6 +10,7 @@
         body, html { width: 100%; height: 100%; background: #1a1a1a; overflow: hidden; font-family: -apple-system, sans-serif; }
         .viewer-container { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 10px; gap: 12px; }
         
+        /* メインビューワーのサイズ指定 */
         .swiper { width: 100%; max-width: 950px; height: 68vh; max-height: 520px; background: #1a1a1a; }
         .swiper-slide { display: flex; justify-content: center; align-items: center; background: #1a1a1a; width: 100% !important; }
         
@@ -21,6 +22,7 @@
         .page-counter { margin-top: 5px; font-size: 13px; color: #eee; background: #333; padding: 5px 16px; border-radius: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); z-index: 20; }
         #loading { position: absolute; color: #ffffff; font-size: 14px; z-index: 100; background: rgba(0,0,0,0.6); padding: 12px 24px; border-radius: 25px; }
 
+        /* サムネイルエリアのスタイル */
         #thumbs-container {
             display: flex; gap: 8px;
             overflow-x: auto;
@@ -83,30 +85,28 @@
     const thumbsContainer = document.getElementById('thumbs-container');
     let pdfDoc = null;
     let swiperInstance = null;
-    const renderedPages = new Map();
 
     function checkIsMobile() {
         return window.innerWidth < 768;
     }
 
+    // ⭕ 【修正】メイン画面用は「毎回新しくCanvasを作って描画する」ことで、画像の剥ぎ取り現象を完全に回避
     async function renderPageToCanvas(pageNum, container) {
-        if (renderedPages.has(pageNum)) {
-            container.appendChild(renderedPages.get(pageNum).cloneNode(true));
-            return;
-        }
+        // すでに中にCanvasが存在している場合は何もしない
+        if (container.querySelector(`[data-page="${pageNum}"]`)) return;
 
         const page = await pdfDoc.getPage(pageNum);
         const canvas = document.createElement('canvas');
+        canvas.setAttribute('data-page', pageNum);
         const context = canvas.getContext('2d');
         
-        const currentScale = checkIsMobile() ? 1.5 : 2.0;
-        const viewport = page.getViewport({ scale: currentScale }); 
+        // メモリバースト防止のため、PC・スマホ問わず一番安定する scale: 1.8 に固定
+        const viewport = page.getViewport({ scale: 1.8 }); 
         canvas.height = viewport.height;
         canvas.width = viewport.width;
 
         await page.render({ canvasContext: context, viewport: viewport }).promise;
-        renderedPages.set(pageNum, canvas);
-        container.appendChild(canvas.cloneNode(true));
+        container.appendChild(canvas);
     }
 
     function buildSlides() {
@@ -120,7 +120,6 @@
                 const slide = document.createElement('div');
                 slide.className = 'swiper-slide single-page';
                 slide.setAttribute('data-pages', JSON.stringify([i]));
-                slide.setAttribute('data-slide-index', i - 1);
                 if (i === 1) slide.setAttribute('data-label', '表紙');
                 else if (i === totalPages && totalPages % 2 === 0) slide.setAttribute('data-label', '裏表紙');
                 else slide.setAttribute('data-label', `${i}P`);
@@ -131,33 +130,28 @@
             const coverSlide = document.createElement('div');
             coverSlide.className = 'swiper-slide single-page';
             coverSlide.setAttribute('data-pages', JSON.stringify([1]));
-            coverSlide.setAttribute('data-slide-index', 0);
             coverSlide.setAttribute('data-label', '表紙');
             wrapper.appendChild(coverSlide);
 
-            let slideIdx = 1;
             for (let i = 2; i < totalPages; i += 2) {
                 const pairSlide = document.createElement('div');
                 pairSlide.className = 'swiper-slide';
                 pairSlide.setAttribute('data-pages', JSON.stringify([i, i + 1]));
-                pairSlide.setAttribute('data-slide-index', slideIdx);
                 pairSlide.setAttribute('data-label', `${i}-${i+1}P`);
                 wrapper.appendChild(pairSlide);
-                slideIdx++;
             }
 
             if (totalPages % 2 === 0) {
                 const backSlide = document.createElement('div');
                 backSlide.className = 'swiper-slide single-page';
                 backSlide.setAttribute('data-pages', JSON.stringify([totalPages]));
-                backSlide.setAttribute('data-slide-index', slideIdx);
                 backSlide.setAttribute('data-label', '裏表紙');
                 wrapper.appendChild(backSlide);
             }
         }
     }
 
-    // ⭕ 関数の定義名にあったタイポ（buildThumbnailnails）を完全に修正しました
+    // サムネイル専用の個別レンダリング（メイン用とは一切干渉させない）
     async function buildThumbnails() {
         thumbsContainer.innerHTML = '';
         const totalPages = pdfDoc.numPages;
@@ -166,7 +160,6 @@
             const thumbBox = document.createElement('div');
             thumbBox.className = 'thumb-box';
             thumbBox.setAttribute('id', `thumb-${i}`);
-            thumbBox.setAttribute('data-page-num', i);
             thumbsContainer.appendChild(thumbBox);
 
             thumbBox.onclick = () => {
@@ -179,6 +172,7 @@
                 }
             };
 
+            // 負荷を極限まで下げるために、1枚ずつ完全に独立して極小サイズを生成
             setTimeout(async () => {
                 try {
                     const page = await pdfDoc.getPage(i);
@@ -256,12 +250,10 @@
                 const slide = swiperInstance.slides[index];
                 const pages = JSON.parse(slide.getAttribute('data-pages'));
                 
-                if (slide.querySelectorAll('canvas').length === 0) {
-                    for (const pNum of pages) {
-                        await renderPageToCanvas(pNum, slide);
-                    }
-                    swiperInstance.update(); 
+                for (const pNum of pages) {
+                    await renderPageToCanvas(pNum, slide);
                 }
+                swiperInstance.update(); 
             }
         }
     }
@@ -271,7 +263,6 @@
         document.getElementById('total-pages').textContent = pdf.numPages + "P";
 
         buildSlides();
-        // ⭕ 呼び出し側の関数名も buildThumbnails に完全統一されています
         await buildThumbnails(); 
         
         document.getElementById('loading').style.display = 'none';
