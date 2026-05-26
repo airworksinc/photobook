@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>THE KIMONO girl vol.1</title>
+<title>Photobook Viewer - Fixed Premium</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght=0,300;0,400;1,300&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,1..1000&display=swap');
 
 *{box-sizing:border-box;margin:0;padding:0}
 
@@ -48,17 +48,16 @@ html,body{width:100%;height:100%;background:var(--bg);color:var(--text);font-fam
   display:flex;
   align-items:stretch;
   box-shadow:0 20px 60px rgba(0,0,0,0.7);
-  /* ページ切り替え時のアニメーション効果 */
-  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition: opacity 0.25s ease, transform 0.25s ease;
 }
 
-/* ページめくりアニメーション用のクラス */
+/* ページ切り替え時のアニメーション効果（タメの演出） */
 .page-turning {
-  opacity: 0.3;
-  transform: scale(0.98);
+  opacity: 0.4;
+  transform: scale(0.97);
 }
 
-/* 見開き：左右2ページ */
+/* 各ページの枠 */
 .page {
   position:relative;
   height:100%;
@@ -67,7 +66,6 @@ html,body{width:100%;height:100%;background:var(--bg);color:var(--text);font-fam
   align-items:center;
   justify-content:center;
   background:#1a1a1a;
-  transition: width 0.3s;
 }
 .page canvas{
   max-width:100%;
@@ -88,17 +86,20 @@ html,body{width:100%;height:100%;background:var(--bg);color:var(--text);font-fam
   pointer-events:none;
 }
 
-/* パソコン環境用のサイズ計算 */
-#book.single .page{width:clamp(150px,35vw,430px)}
-#book.double .page{width:clamp(150px,35vw,430px)}
+/* パソコン用の基本サイズ（1Pと2Pで本の全体幅を調整） */
+#book.single { width: clamp(150px, 35vw, 430px); }
+#book.double { width: clamp(300px, 70vw, 860px); }
 
-/* ── 【重要】スマホ表示（レスポンシブ）の挙動修正 ── */
+#book.single .page { width: 100%; }
+#book.double .page { width: 50%; }
+
+/* ── 【修正】スマホ表示のCSS競合を完全シャットアウト ── */
 @media(max-width:767px){
-  #book-wrap { height: 60vh; }
-  /* スマホの時は一律で1ページずつの幅に固定 */
-  #book.single .page, #book.double .page { width: 80vw; max-width: 380px; }
-  #page-left { display: none !important; } /* スマホ時は左ページを完全に消去 */
-  .spine-shadow { display: none !important; } /* 綴じ目も消去 */
+  #book-wrap { height: 55vh; width: 100%; }
+  #book.single, #book.double { width: 85vw !important; max-width: 360px; }
+  #book.single .page, #book.double .page { width: 100% !important; }
+  #page-left { display: none !important; }
+  .spine-shadow { display: none !important; }
 }
 
 /* ── ナビゲーション矢印 ── */
@@ -123,10 +124,10 @@ html,body{width:100%;height:100%;background:var(--bg);color:var(--text);font-fam
 #btn-prev{right:calc(100% + 16px)}
 #btn-next{left:calc(100% + 16px)}
 
-/* スマホ：矢印を画面の下部に綺麗に配置 */
+/* スマホ：矢印を画面の下部へ避難 */
 @media(max-width:767px){
-  #btn-prev{right:10px;top:auto;bottom:-10px;transform:none}
-  #btn-next{left:10px;top:auto;bottom:-10px;transform:none}
+  #btn-prev{right:10px;top:auto;bottom:-20px;transform:none}
+  #btn-next{left:10px;top:auto;bottom:-20px;transform:none}
 }
 
 /* ── サムネイル ── */
@@ -210,7 +211,6 @@ const app=document.getElementById('app');
 
 const cache=new Map();
 
-// 画面がスマホサイズかどうかを判定
 function isMobile() {
     return window.innerWidth < 768;
 }
@@ -219,7 +219,7 @@ async function renderPage(pNum){
   if(cache.has(pNum)) return cache.get(pNum);
   const page=await pdfDoc.getPage(pNum);
   
-  // スマホのときは解像度倍率を少し抑えて軽量化、PCはクッキリ表示
+  // スマホとPCで最適な画質スケールを設定
   const scale = isMobile() ? 1.5 : Math.min(2, window.devicePixelRatio || 1) * 1.5;
   const viewport=page.getViewport({scale});
   
@@ -241,13 +241,11 @@ async function showInContainer(container,pNum){
   container.appendChild(c.cloneNode(true));
 }
 
-// ページの割り当て計算ロジック（スマホとPCで分岐）
+// スプレッド（表示位置）の割り当て計算
 function spreadToPages(s){
   if (isMobile()) {
-      // スマホは1ページずつ進む
-      return { right: s + 1, left: null };
+      return { right: s + 1, left: null }; // スマホは常に単一ページ扱い
   }
-  // PCは従来通り見開き計算
   if(s===0) return{right:1,left:null};
   const r=s*2, l=s*2+1;
   const hasLeft=l<=totalPages;
@@ -257,18 +255,19 @@ function spreadToPages(s){
 
 function totalSpreads(){
   if (isMobile()) {
-      return totalPages - 1; // スマホは全ページ数が総スライド数
+      return totalPages - 1;
   }
   return Math.ceil((totalPages-1)/2);
 }
 
 async function render(){
-  // アニメーション効果：めくる瞬間に少し縮小して透明度を下げる
+  // めくりアニメーション用のクラスを付与
   book.classList.add('page-turning');
   
   const{right,left}=spreadToPages(spread);
   const isSingle=!left || isMobile();
 
+  // アニメーションの「タメ」を作ってから描画を切り替える
   setTimeout(async () => {
     book.className=isSingle?'single':'double';
 
@@ -283,7 +282,7 @@ async function render(){
     await showInContainer(pageRight,right);
     if(!isSingle) await showInContainer(pageLeft,left);
 
-    // カウンターの表示テキスト調整
+    // カウンターテキストの同期
     if(isMobile()){
       if(right===1) counter.textContent=`表紙 / ${totalPages}P`;
       else if(right===totalPages) counter.textContent=`裏表紙 / ${totalPages}P`;
@@ -300,13 +299,13 @@ async function render(){
     btnNext.disabled=spread >= totalSpreads();
     updateThumbActive(right,left);
 
-    // 先読み
+    // 前後ページの先読み
     prefetch(spread-1);
     prefetch(spread+1);
 
-    // アニメーション終了：元に戻す
+    // アニメーション終了（元に戻す）
     book.classList.remove('page-turning');
-  }, 150); // アニメーションのタメの時間
+  }, 120); 
 }
 
 function prefetch(s){
@@ -323,13 +322,13 @@ function go(dir){
   render();
 }
 
-// キーボード操作
+// キーボード
 document.addEventListener('keydown',e=>{
   if(e.key==='ArrowLeft') go(1);
   if(e.key==='ArrowRight') go(-1);
 });
 
-// サムネイル構築（スマホが絶対落ちないように遅延生成に改良）
+// サムネイル構築（時差レンダリングでスマホを保護）
 async function buildThumbs(){
   thumbsEl.innerHTML='';
   for(let i=1;i<=totalPages;i++){
@@ -350,7 +349,6 @@ async function buildThumbs(){
       render();
     };
 
-    // 画面内に入りそうなタイミングで非同期で最小限レンダリング
     setTimeout(async()=>{
       try{
         const page=await pdfDoc.getPage(i);
@@ -360,17 +358,22 @@ async function buildThumbs(){
         await page.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
         d.appendChild(c);
       }catch(e){}
-    }, i * 30); // 処理をわずかにズラしてスマホの同時負荷を避ける
+    }, i * 25); 
   }
 }
 
 function updateThumbActive(right,left){
   document.querySelectorAll('.thumb').forEach(t=>{
     const p=parseInt(t.dataset.page);
-    t.classList.toggle('active',p===right||p===left);
+    // スマホ時は右側のターゲット（1ページ）のみをアクティブ判定
+    if(isMobile()) {
+        t.classList.toggle('active', p === right);
+    } else {
+        t.classList.toggle('active', p === right || p === left);
+    }
   });
   
-  // アクティブなサムネイルの位置まで自動スクロール
+  // アクティブなサムネイルまで滑らかに自動スクロール
   const activeThumb = document.querySelector('.thumb.active');
   if (activeThumb) {
       thumbsEl.scrollTo({
@@ -380,7 +383,7 @@ function updateThumbActive(right,left){
   }
 }
 
-// タッチスワイプ
+// スワイプ操作
 let touchStartX=0;
 book.addEventListener('touchstart',e=>{touchStartX=e.touches[0].clientX},{passive:true});
 book.addEventListener('touchend',e=>{
@@ -390,12 +393,16 @@ book.addEventListener('touchend',e=>{
   }
 },{passive:true});
 
-// 画面サイズが変更されたら再計算
+// リサイズ対応
+let resizeTimeout;
 window.addEventListener('resize', () => {
-    render();
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+        render();
+    }, 150);
 });
 
-// メイン処理起動
+// 初期起動
 (async()=>{
   try{
     pdfDoc=await pdfjsLib.getDocument(PDF_URL).promise;
