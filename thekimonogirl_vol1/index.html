@@ -3,70 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Booklet Style PDF Viewer</title>
+    <title>THE KIMONO girl vol.1</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
-    
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body, html { 
-            width: 100%; height: 100%; 
-            background: #1a1a1a; /* 全体の背景色 */
-            overflow: hidden; 
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
-        }
-        .viewer-container { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 15px; }
+        body, html { width: 100%; height: 100%; background: #1a1a1a; overflow: hidden; font-family: -apple-system, sans-serif; }
+        .viewer-container { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 10px; }
         
-        .swiper { 
-            width: 100%; 
-            max-width: 950px; 
-            height: 80vh; 
-            max-height: 580px; 
-            background: #1a1a1a; 
-        }
+        /* ビューワー（本）全体のサイズ上限 */
+        .swiper { width: 100%; max-width: 950px; height: 80vh; max-height: 580px; background: #1a1a1a; }
+        .swiper-slide { display: flex; justify-content: center; align-items: center; background: #1a1a1a; width: 100% !important; }
         
-        .swiper-slide { 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            background: #1a1a1a;
-        }
-        
-        /* 1P表示（表紙・裏表紙）の時は、中央に綺麗に収まるように幅を制限 */
-        .swiper-slide.single-page canvas {
-            max-width: 50%;
-        }
-        
-        .swiper-slide canvas { 
-            max-width: 100%; 
-            max-height: 100%; 
-            object-fit: contain; 
-            box-shadow: 0 8px 20px rgba(0,0,0,0.5); /* ページに立体感のある影をつける */
-        }
-        
-        /* 左右ボタンのデザイン */
-        .swiper-button-next, .swiper-button-prev { color: #ffffff; background: rgba(0,0,0,0.5); width: 44px; height: 44px; border-radius: 50%; }
+        /* 1P表示のサイズ制御（表紙・裏表紙） */
+        .swiper-slide.single-page canvas { max-width: 50% !important; }
+
+        .swiper-slide canvas { max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 8px 20px rgba(0,0,0,0.5); background: #1a1a1a; }
+        .swiper-button-next, .swiper-button-prev { color: #ffffff; background: rgba(0,0,0,0.5); width: 44px; height: 44px; border-radius: 50%; z-index: 20; }
         .swiper-button-next:after, .swiper-button-prev:after { font-size: 18px; font-weight: bold; }
-        
-        /* 下部カウンター */
-        .page-counter { margin-top: 15px; font-size: 13px; color: #eee; background: #333; padding: 5px 16px; border-radius: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
-        #loading { position: absolute; color: #ffffff; font-size: 14px; z-index: 10; background: rgba(0,0,0,0.6); padding: 12px 24px; border-radius: 25px; }
+        .page-counter { margin-top: 15px; font-size: 13px; color: #eee; background: #333; padding: 5px 16px; border-radius: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); z-index: 20; }
+        #loading { position: absolute; color: #ffffff; font-size: 14px; z-index: 100; background: rgba(0,0,0,0.6); padding: 12px 24px; border-radius: 25px; }
+
+        /* ── 【新規追加】スマホ表示（レスポンシブ）の食い込み徹底防止対策 ── */
+        @media (max-width: 767px) {
+            .swiper { height: 65vh; } /* スマホ画面に合わせて高さを微調整 */
+            
+            /* 表紙・裏表紙をスマホ画面いっぱいに広げる */
+            .swiper-slide.single-page canvas { max-width: 100% !important; }
+            
+            /* 中身の見開き（2枚ドッキング）スライドから、2枚目を完全に隠して1枚目だけにする */
+            .swiper-slide:not(.single-page) canvas:nth-child(2) { 
+                display: none !important; 
+            }
+            /* 残った1枚目の画像を中央に大きくフィットさせる */
+            .swiper-slide:not(.single-page) canvas:nth-child(1) { 
+                max-width: 100% !important; 
+            }
+            
+            /* スマホ時の左右ボタンの位置を調整 */
+            .swiper-button-next { right: 5px; }
+            .swiper-button-prev { left: 5px; }
+        }
     </style>
 </head>
 <body>
 
 <div class="viewer-container">
     <div id="loading">フォトブックを読み込み中...</div>
-    
     <div class="swiper" dir="rtl" style="display:none;">
         <div class="swiper-wrapper" id="swiper-wrapper">
             </div>
         <div class="swiper-button-prev"></div>
         <div class="swiper-button-next"></div>
     </div>
-    
-    <div class="page-counter" id="counter-box" style="display:none;">
-        <span id="current-page">表紙</span> / <span id="total-pages">0</span>
-    </div>
+    <div class="page-counter" id="counter-box" style="display:none;"><span id="current-page">表紙</span> / <span id="total-pages">0</span></div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -74,87 +63,155 @@
 
 <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
     const pdfUrl = 'book.pdf'; 
     const wrapper = document.getElementById('swiper-wrapper');
+    let pdfDoc = null;
+    const renderedPages = new Map();
+
+    // 画面がスマホサイズかどうかを判定する関数
+    function checkIsMobile() {
+        return window.innerWidth < 768;
+    }
+
+    async function renderPageToCanvas(pageNum, container) {
+        const cacheKey = pageNum;
+        if (renderedPages.has(cacheKey)) {
+            container.appendChild(renderedPages.get(cacheKey));
+            return;
+        }
+
+        const page = await pdfDoc.getPage(pageNum);
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        
+        // スマホの時は少しスケールを抑えて描画負荷とメモリを保護、PCは高解像度
+        const currentScale = checkIsMobile() ? 1.5 : 2.0;
+        const viewport = page.getViewport({ scale: currentScale }); 
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        await page.render({ canvasContext: context, viewport: viewport }).promise;
+        renderedPages.set(cacheKey, canvas);
+        container.appendChild(canvas);
+    }
 
     pdfjsLib.getDocument(pdfUrl).promise.then(async function(pdf) {
+        pdfDoc = pdf;
         const totalPages = pdf.numPages;
         document.getElementById('total-pages').textContent = totalPages + "P";
 
-        // 全ページ分のCanvas（画像データ）を一時的に配列に保持する
-        const pagesData = [];
-        for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-            const page = await pdf.getPage(pageNum);
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
-            const viewport = page.getViewport({ scale: 2.5 }); 
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-
-            const renderContext = { canvasContext: context, viewport: viewport };
-            await page.render(renderContext).promise;
-            pagesData.push(canvas);
-        }
-
-        // --- パソコン（見開き仕様）用にスライドの構造を手動で組み立てる ---
-        
-        // ① 1ページ目：表紙（独立した1枚のスライドとして作成）
+        // 1. 表紙
         const coverSlide = document.createElement('div');
         coverSlide.className = 'swiper-slide single-page';
-        coverSlide.appendChild(pagesData[0]);
-        coverSlide.setAttribute('data-page-label', '表紙');
+        coverSlide.setAttribute('data-pages', JSON.stringify([1]));
+        coverSlide.setAttribute('data-label', '表紙');
         wrapper.appendChild(coverSlide);
 
-        // ② 2ページ目から、最後から2番目のページまでを「2枚ペア」でスライドにしていく
-        for (let i = 1; i < totalPages - 1; i += 2) {
+        // 2. 見開き中身
+        for (let i = 2; i < totalPages; i += 2) {
             const pairSlide = document.createElement('div');
             pairSlide.className = 'swiper-slide';
+            pairSlide.setAttribute('data-pages', JSON.stringify([i, i + 1]));
             
-            // 右開きの本なので、奇数ページ（右）を先に、偶数ページ（左）を後に並べる
-            if (pagesData[i]) pairSlide.appendChild(pagesData[i]);
-            if (pagesData[i+1]) pairSlide.appendChild(pagesData[i+1]);
-            
-            pairSlide.setAttribute('data-page-label', `${i+1}-${i+2}P`);
+            // カウンター用の表記をスマホとPCで最適に切り替える仕掛け
+            if (checkIsMobile()) {
+                pairSlide.setAttribute('data-label-pc', `${i}-${i+1}P`);
+                pairSlide.setAttribute('data-label-sp', `${i}P`);
+            } else {
+                pairSlide.setAttribute('data-label-pc', `${i}-${i+1}P`);
+                pairSlide.setAttribute('data-label-sp', `${i}-${i+1}P`);
+            }
             wrapper.appendChild(pairSlide);
         }
 
-        // ③ 最終ページ：裏表紙（奇数ページで終わる仕様に合わせて独立させる）
-        if (totalPages > 1) {
-            const backCoverSlide = document.createElement('div');
-            backCoverSlide.className = 'swiper-slide single-page';
-            backCoverSlide.appendChild(pagesData[totalPages - 1]);
-            backCoverSlide.setAttribute('data-page-label', '裏表紙');
-            wrapper.appendChild(backCoverSlide);
+        // 3. 裏表紙
+        if (totalPages % 2 === 0) {
+            const backSlide = document.createElement('div');
+            backSlide.className = 'swiper-slide single-page';
+            backSlide.setAttribute('data-pages', JSON.stringify([totalPages]));
+            backSlide.setAttribute('data-label', '裏表紙');
+            wrapper.appendChild(backSlide);
         }
 
         document.getElementById('loading').style.display = 'none';
         document.querySelector('.swiper').style.display = 'block';
         document.getElementById('counter-box').style.display = 'block';
 
-        // Swiper初期化
+        // Swiperの初期化（めくりエフェクトを追加）
         const swiper = new Swiper('.swiper', {
             rtl: true,
             loop: false,
-            speed: 450,
+            speed: 550, // めくるアニメーションの速度（ミリ秒）
             grabCursor: true,
-            effect: 'slide',
-            slidesPerView: 1, // 各スライド（表紙、または見開きペア）を画面に1つずつ出す
+            slidesPerView: 1,
+            
+            // ── 【新規追加】実際の読書に近いスムーズなページめくりアニメーション効果 ──
+            effect: 'creative',
+            creativeEffect: {
+                prev: {
+                    shadow: true,
+                    translate: [0, 0, -400],
+                },
+                next: {
+                    translate: ['-100%', 0, 0],
+                },
+            },
+            
             navigation: { nextEl: '.swiper-button-next', prevEl: '.swiper-button-prev' },
             keyboard: { enabled: true },
             on: {
+                init: function () {
+                    loadVisiblePages(this);
+                    updateCounter(this);
+                },
                 slideChange: function () {
-                    // 現在アクティブなスライドに設定されたページラベルを取得してカウンターに表示
-                    const activeSlide = this.slides[this.activeIndex];
-                    const label = activeSlide.getAttribute('data-page-label');
-                    document.getElementById('current-page').textContent = label;
+                    loadVisiblePages(this);
+                    updateCounter(this);
                 }
             }
         });
 
+        // ページ数カウンターの文字をデバイス別に更新する関数
+        function updateCounter(swiperInstance) {
+            const activeSlide = swiperInstance.slides[swiperInstance.activeIndex];
+            const staticLabel = activeSlide.getAttribute('data-label');
+            
+            if (staticLabel) {
+                document.getElementById('current-page').textContent = staticLabel;
+            } else {
+                const pcLabel = activeSlide.getAttribute('data-label-pc');
+                const spLabel = activeSlide.getAttribute('data-label-sp');
+                document.getElementById('current-page').textContent = checkIsMobile() ? spLabel : pcLabel;
+            }
+        }
+
+        async function loadVisiblePages(swiperInstance) {
+            const activeIndex = swiperInstance.activeIndex;
+            const targets = [activeIndex - 1, activeIndex, activeIndex + 1];
+
+            for (const index of targets) {
+                if (index >= 0 && index < swiperInstance.slides.length) {
+                    const slide = swiperInstance.slides[index];
+                    const pages = JSON.parse(slide.getAttribute('data-pages'));
+                    
+                    if (slide.querySelectorAll('canvas').length === 0) {
+                        for (const pNum of pages) {
+                            await renderPageToCanvas(pNum, slide);
+                        }
+                        swiperInstance.update(); 
+                    }
+                }
+            }
+        }
+
+        // 画面サイズが途中で変わった時にカウンターと表示を補正
+        window.addEventListener('resize', function() {
+            updateCounter(swiper);
+        });
+
     }).catch(function(error) {
         console.error('PDF読み込みエラー: ', error);
-        document.getElementById('loading').textContent = 'PDFファイルの読み込みに失敗しました。';
+        document.getElementById('loading').textContent = '読み込みに失敗しました。';
     });
 </script>
 
