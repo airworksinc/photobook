@@ -1,2 +1,2 @@
 # thekimonogirl
-THE KIMONO girl 2024
+THE KIMONO girl vol.1
