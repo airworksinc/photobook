@@ -157,6 +157,7 @@
         }
     }
 
+    // ⭕ 関数の定義名にあったタイポ（buildThumbnailnails）を完全に修正しました
     async function buildThumbnails() {
         thumbsContainer.innerHTML = '';
         const totalPages = pdfDoc.numPages;
@@ -270,7 +271,7 @@
         document.getElementById('total-pages').textContent = pdf.numPages + "P";
 
         buildSlides();
-        // ⭕ タイポを完全に修正しました
+        // ⭕ 呼び出し側の関数名も buildThumbnails に完全統一されています
         await buildThumbnails(); 
         
         document.getElementById('loading').style.display = 'none';
@@ -279,4 +280,21 @@
 
         initSwiper();
 
-        let
+        let lastMode = checkIsMobile();
+        window.addEventListener('resize', function() {
+            const currentMode = checkIsMobile();
+            if (currentMode !== lastMode) {
+                buildSlides();
+                initSwiper();
+                lastMode = currentMode;
+            }
+        });
+
+    }).catch(function(error) {
+        console.error('PDF読み込みエラー: ', error);
+        document.getElementById('loading').textContent = '読み込みに失敗しました。';
+    });
+</script>
+
+</body>
+</html>
