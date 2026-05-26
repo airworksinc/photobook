@@ -11,11 +11,10 @@
         body, html { width: 100%; height: 100%; background: rgba(26, 26, 26, 0.85); overflow: hidden; font-family: -apple-system, sans-serif; }
         .viewer-container { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 10px; gap: 12px; }
         
+        /* 見開きPDFが綺麗に収まるようにマックスサイズを調整 */
         .swiper { width: 100%; max-width: 950px; height: 68vh; max-height: 520px; background: rgba(26, 26, 26, 0.85); }
         .swiper-slide { display: flex; justify-content: center; align-items: center; background: rgba(26, 26, 26, 0.85); width: 100% !important; }
         
-        #book-wrapper:not(.is-mobile-view) .swiper-slide.single-page canvas { max-width: 50% !important; }
-
         .swiper-slide canvas { max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 8px 20px rgba(0,0,0,0.5); background: rgba(26, 26, 26, 0.85); }
         
         .swiper-button-next, .swiper-button-prev { color: #ffffff; background: rgba(0,0,0,0.5); width: 44px; height: 44px; border-radius: 50%; z-index: 20; }
@@ -35,9 +34,10 @@
         #thumbs-container::-webkit-scrollbar { height: 4px; }
         #thumbs-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
 
+        /* 見開きサムネイル用に少し横幅を広く設計 */
         .thumb-box {
             flex-shrink: 0;
-            width: 44px; height: 58px;
+            width: 65px; height: 48px;
             border: 1px solid rgba(255,255,255,0.1);
             border-radius: 2px;
             background: #2a2a2a;
@@ -70,7 +70,7 @@
         <div class="swiper-button-next"></div>
     </div>
     
-    <div class="page-counter" id="counter-box" style="display:none;"><span id="current-page">表紙</span> / <span id="total-pages">0</span></div>
+    <div class="page-counter" id="counter-box" style="display:none;"><span id="current-page">1</span> / <span id="total-pages">0</span></div>
     
     <div id="thumbs-container"></div>
 </div>
@@ -85,12 +85,8 @@
     const thumbsContainer = document.getElementById('thumbs-container');
     let pdfDoc = null;
     let swiperInstance = null;
-    const renderedPages = new Map();
 
-    function checkIsMobile() {
-        return window.innerWidth < 768;
-    }
-
+    // 見開きPDFなので、PC・スマホ問わず「1スライド＝PDFの1ページ（2p分合体）」としてシンプルに処理
     async function renderPageToCanvas(pageNum, container) {
         if (container.querySelector(`[data-page="${pageNum}"]`)) return;
 
@@ -99,7 +95,8 @@
         canvas.setAttribute('data-page', pageNum);
         const context = canvas.getContext('2d');
         
-        const viewport = page.getViewport({ scale: 1.8 }); 
+        // 元々が横長なのでスケールは 1.6 程度が最も安定して高画質になります
+        const viewport = page.getViewport({ scale: 1.6 }); 
         canvas.height = viewport.height;
         canvas.width = viewport.width;
 
@@ -107,45 +104,24 @@
         container.appendChild(canvas);
     }
 
+    // 見開きPDF用に構造を1対1の極めてシンプルな形に修正
     function buildSlides() {
         wrapper.innerHTML = '';
         const totalPages = pdfDoc.numPages;
-        const isMobile = checkIsMobile();
 
-        if (isMobile) {
-            document.getElementById('swiper-wrapper').classList.add('is-mobile-view');
-            for (let i = 1; i <= totalPages; i++) {
-                const slide = document.createElement('div');
-                slide.className = 'swiper-slide single-page';
-                slide.setAttribute('data-pages', JSON.stringify([i]));
-                if (i === 1) slide.setAttribute('data-label', '表紙');
-                else if (i === totalPages && totalPages % 2 === 0) slide.setAttribute('data-label', '裏表紙');
-                else slide.setAttribute('data-label', `${i}P`);
-                wrapper.appendChild(slide);
+        for (let i = 1; i <= totalPages; i++) {
+            const slide = document.createElement('div');
+            slide.className = 'swiper-slide';
+            slide.setAttribute('data-pages', JSON.stringify([i]));
+            
+            // ページ番号のラベル付け（見開きPDFの規則性に対応）
+            if (i === 1) slide.setAttribute('data-label', '表紙');
+            else if (i === totalPages) slide.setAttribute('data-label', '裏表紙');
+            else {
+                const pageStart = (i - 1) * 2;
+                slide.setAttribute('data-label', `${pageStart}-${pageStart + 1}P`);
             }
-        } else {
-            document.getElementById('swiper-wrapper').classList.remove('is-mobile-view');
-            const coverSlide = document.createElement('div');
-            coverSlide.className = 'swiper-slide single-page';
-            coverSlide.setAttribute('data-pages', JSON.stringify([1]));
-            coverSlide.setAttribute('data-label', '表紙');
-            wrapper.appendChild(coverSlide);
-
-            for (let i = 2; i < totalPages; i += 2) {
-                const pairSlide = document.createElement('div');
-                pairSlide.className = 'swiper-slide';
-                pairSlide.setAttribute('data-pages', JSON.stringify([i, i + 1]));
-                pairSlide.setAttribute('data-label', `${i}-${i+1}P`);
-                wrapper.appendChild(pairSlide);
-            }
-
-            if (totalPages % 2 === 0) {
-                const backSlide = document.createElement('div');
-                backSlide.className = 'swiper-slide single-page';
-                backSlide.setAttribute('data-pages', JSON.stringify([totalPages]));
-                backSlide.setAttribute('data-label', '裏表紙');
-                wrapper.appendChild(backSlide);
-            }
+            wrapper.appendChild(slide);
         }
     }
 
@@ -160,19 +136,13 @@
             thumbsContainer.appendChild(thumbBox);
 
             thumbBox.onclick = () => {
-                if (checkIsMobile()) {
-                    swiperInstance.slideTo(i - 1);
-                } else {
-                    if (i === 1) swiperInstance.slideTo(0);
-                    else if (i === totalPages && totalPages % 2 === 0) swiperInstance.slideTo(swiperInstance.slides.length - 1);
-                    else swiperInstance.slideTo(Math.ceil((i - 1) / 2));
-                }
+                swiperInstance.slideTo(i - 1);
             };
 
             setTimeout(async () => {
                 try {
                     const page = await pdfDoc.getPage(i);
-                    const vp = page.getViewport({ scale: 0.1 });
+                    const vp = page.getViewport({ scale: 0.08 });
                     const canvas = document.createElement('canvas');
                     canvas.width = vp.width; canvas.height = vp.height;
                     await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
@@ -256,7 +226,10 @@
 
     pdfjsLib.getDocument(pdfUrl).promise.then(async function(pdf) {
         pdfDoc = pdf;
-        document.getElementById('total-pages').textContent = pdf.numPages + "P";
+        
+        // カウンターの総ページ表記を見開きの「実際の本のページ数」に自動換算
+        const actualTotalPages = (pdf.numPages - 1) * 2;
+        document.getElementById('total-pages').textContent = actualTotalPages + "P";
 
         buildSlides();
         await buildThumbnails(); 
@@ -266,16 +239,6 @@
         document.getElementById('counter-box').style.display = 'block';
 
         initSwiper();
-
-        let lastMode = checkIsMobile();
-        window.addEventListener('resize', function() {
-            const currentMode = checkIsMobile();
-            if (currentMode !== lastMode) {
-                buildSlides();
-                initSwiper();
-                lastMode = currentMode;
-            }
-        });
 
     }).catch(function(error) {
         console.error('PDF読み込みエラー: ', error);
