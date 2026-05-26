@@ -3,101 +3,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Photo Book Viewer</title>
+    <title>Booklet Style PDF Viewer</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
     
     <style>
-        /* --- [デザインカスタマイズエリア] --- */
-        * { 
-            box-sizing: border-box; 
-            margin: 0; 
-            padding: 0; 
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body, html { 
-            width: 100%; 
-            height: 100%; 
-            /* ① 全体の背景色（写真を引き立たせるために高級感のある暗めのグレーにしています） */
-            background: #1a1a1a; 
+            width: 100%; height: 100%; 
+            background: #1a1a1a; /* 全体の背景色 */
             overflow: hidden; 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
         }
+        .viewer-container { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 15px; }
         
-        /* 全体を表示するコンテナ */
-        .viewer-container { 
-            width: 100%; 
-            height: 100%; 
-            display: flex; 
-            flex-direction: column; 
-            justify-content: center; 
-            align-items: center; 
-            padding: 15px; 
-        }
-        
-        /* ② ビューワー（本）のサイズと枠線の設定 */
         .swiper { 
             width: 100%; 
-            max-width: 950px; /* 見開き（横長）が綺麗に収まる最大幅 */
-            height: 80vh;     /* 画面の高さに対する比率 */
+            max-width: 950px; 
+            height: 80vh; 
             max-height: 580px; 
-            background: #ffffff; 
-            border-radius: 4px; /* 本の角丸（0pxにするとキッチリした四角になります） */
-            /* 本の後ろに落とす影（立体感を演出） */
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4); 
+            background: #1a1a1a; 
         }
         
         .swiper-slide { 
             display: flex; 
             justify-content: center; 
             align-items: center; 
-            background: #ffffff; 
+            background: #1a1a1a;
         }
         
-        /* PDFをレンダリングするCanvasの調整 */
+        /* 1P表示（表紙・裏表紙）の時は、中央に綺麗に収まるように幅を制限 */
+        .swiper-slide.single-page canvas {
+            max-width: 50%;
+        }
+        
         .swiper-slide canvas { 
             max-width: 100%; 
             max-height: 100%; 
             object-fit: contain; 
+            box-shadow: 0 8px 20px rgba(0,0,0,0.5); /* ページに立体感のある影をつける */
         }
         
-        /* ③ 左右のページ移動ボタン（矢印）のデザイン */
-        .swiper-button-next, .swiper-button-prev { 
-            color: #ffffff;             /* 矢印自体の色 */
-            background: rgba(0,0,0,0.4); /* 丸い背景の色（半透明の黒） */
-            width: 44px; 
-            height: 44px; 
-            border-radius: 50%; 
-            transition: background 0.3s;
-        }
-        .swiper-button-next:hover, .swiper-button-prev:hover {
-            background: rgba(0,0,0,0.7); /* マウスを乗せたときに少し濃くする */
-        }
-        .swiper-button-next:after, .swiper-button-prev:after { 
-            font-size: 18px; 
-            font-weight: bold; 
-        }
+        /* 左右ボタンのデザイン */
+        .swiper-button-next, .swiper-button-prev { color: #ffffff; background: rgba(0,0,0,0.5); width: 44px; height: 44px; border-radius: 50%; }
+        .swiper-button-next:after, .swiper-button-prev:after { font-size: 18px; font-weight: bold; }
         
-        /* ④ 下部ページカウンターのデザイン */
-        .page-counter { 
-            margin-top: 15px; 
-            font-size: 13px; 
-            color: #eeeeee;         /* 文字の色 */
-            background: #333333;     /* バッジの背景色 */
-            padding: 5px 16px; 
-            border-radius: 20px; 
-            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-            letter-spacing: 1px;
-        }
-        
-        /* PDF読み込み中のローディング画面 */
-        #loading { 
-            position: absolute; 
-            color: #ffffff; 
-            font-size: 14px; 
-            z-index: 10; 
-            background: rgba(0,0,0,0.6); 
-            padding: 12px 24px; 
-            border-radius: 25px; 
-        }
+        /* 下部カウンター */
+        .page-counter { margin-top: 15px; font-size: 13px; color: #eee; background: #333; padding: 5px 16px; border-radius: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+        #loading { position: absolute; color: #ffffff; font-size: 14px; z-index: 10; background: rgba(0,0,0,0.6); padding: 12px 24px; border-radius: 25px; }
     </style>
 </head>
 <body>
@@ -113,7 +65,7 @@
     </div>
     
     <div class="page-counter" id="counter-box" style="display:none;">
-        <span id="current-page">1</span> / <span id="total-pages">0</span>
+        <span id="current-page">表紙</span> / <span id="total-pages">0</span>
     </div>
 </div>
 
@@ -121,73 +73,88 @@
 <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
 
 <script>
-    // PDF.jsのバックグラウンド処理（ワーカー）を設定
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-    // 【重要】同じフォルダ内に置いたPDFファイル名を指定
     const pdfUrl = 'book.pdf'; 
-
     const wrapper = document.getElementById('swiper-wrapper');
 
-    // PDFの読み込みと自動Canvas（画像）変換処理
     pdfjsLib.getDocument(pdfUrl).promise.then(async function(pdf) {
         const totalPages = pdf.numPages;
-        document.getElementById('total-pages').textContent = totalPages;
+        document.getElementById('total-pages').textContent = totalPages + "P";
 
-        // 全ページをループ処理
+        // 全ページ分のCanvas（画像データ）を一時的に配列に保持する
+        const pagesData = [];
         for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
             const page = await pdf.getPage(pageNum);
-            const slide = document.createElement('div');
-            slide.className = 'swiper-slide';
-            
             const canvas = document.createElement('canvas');
             const context = canvas.getContext('2d');
-            
-            // 見開き横長PDFを高画質で鮮明に表示させるため、倍率（scale）を2.5に設定
             const viewport = page.getViewport({ scale: 2.5 }); 
             canvas.height = viewport.height;
             canvas.width = viewport.width;
 
-            const renderContext = { 
-                canvasContext: context, 
-                viewport: viewport 
-            };
+            const renderContext = { canvasContext: context, viewport: viewport };
             await page.render(renderContext).promise;
-            
-            slide.appendChild(canvas);
-            wrapper.appendChild(slide);
+            pagesData.push(canvas);
         }
 
-        // 読み込みがすべて完了したら表示を切り替え
+        // --- パソコン（見開き仕様）用にスライドの構造を手動で組み立てる ---
+        
+        // ① 1ページ目：表紙（独立した1枚のスライドとして作成）
+        const coverSlide = document.createElement('div');
+        coverSlide.className = 'swiper-slide single-page';
+        coverSlide.appendChild(pagesData[0]);
+        coverSlide.setAttribute('data-page-label', '表紙');
+        wrapper.appendChild(coverSlide);
+
+        // ② 2ページ目から、最後から2番目のページまでを「2枚ペア」でスライドにしていく
+        for (let i = 1; i < totalPages - 1; i += 2) {
+            const pairSlide = document.createElement('div');
+            pairSlide.className = 'swiper-slide';
+            
+            // 右開きの本なので、奇数ページ（右）を先に、偶数ページ（左）を後に並べる
+            if (pagesData[i]) pairSlide.appendChild(pagesData[i]);
+            if (pagesData[i+1]) pairSlide.appendChild(pagesData[i+1]);
+            
+            pairSlide.setAttribute('data-page-label', `${i+1}-${i+2}P`);
+            wrapper.appendChild(pairSlide);
+        }
+
+        // ③ 最終ページ：裏表紙（奇数ページで終わる仕様に合わせて独立させる）
+        if (totalPages > 1) {
+            const backCoverSlide = document.createElement('div');
+            backCoverSlide.className = 'swiper-slide single-page';
+            backCoverSlide.appendChild(pagesData[totalPages - 1]);
+            backCoverSlide.setAttribute('data-page-label', '裏表紙');
+            wrapper.appendChild(backCoverSlide);
+        }
+
         document.getElementById('loading').style.display = 'none';
         document.querySelector('.swiper').style.display = 'block';
         document.getElementById('counter-box').style.display = 'block';
 
-        // 右開き・スライド式ビューワー（Swiper）の起動設定
+        // Swiper初期化
         const swiper = new Swiper('.swiper', {
-            rtl: true,         // 右開きモード（右から左へ進む）を有効化
-            loop: false,       // 最後のページで止める
-            speed: 450,        // ページがスライドするスピード（ミリ秒）
-            grabCursor: true,  // マウスを乗せたときに手のアイコンにする
-            effect: 'slide',   // 見開き画像が綺麗に滑るスライドエフェクトを指定
-            navigation: { 
-                nextEl: '.swiper-button-next', 
-                prevEl: '.swiper-button-prev' 
-            },
-            keyboard: {
-                enabled: true, // キーボードの左右矢印キーでの操作も可能にする
-            },
+            rtl: true,
+            loop: false,
+            speed: 450,
+            grabCursor: true,
+            effect: 'slide',
+            slidesPerView: 1, // 各スライド（表紙、または見開きペア）を画面に1つずつ出す
+            navigation: { nextEl: '.swiper-button-next', prevEl: '.swiper-button-prev' },
+            keyboard: { enabled: true },
             on: {
-                // ページが切り替わったときに下部のカウンター数値を同期
                 slideChange: function () {
-                    document.getElementById('current-page').textContent = this.activeIndex + 1;
+                    // 現在アクティブなスライドに設定されたページラベルを取得してカウンターに表示
+                    const activeSlide = this.slides[this.activeIndex];
+                    const label = activeSlide.getAttribute('data-page-label');
+                    document.getElementById('current-page').textContent = label;
                 }
             }
         });
 
     }).catch(function(error) {
         console.error('PDF読み込みエラー: ', error);
-        document.getElementById('loading').textContent = 'PDFファイルの読み込みに失敗しました。名前（book.pdf）が合っているか確認してください。';
+        document.getElementById('loading').textContent = 'PDFファイルの読み込みに失敗しました。';
     });
 </script>
 
