@@ -1,162 +1,362 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Booklet Style PDF Viewer</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
-    
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body, html { 
-            width: 100%; height: 100%; 
-            background: #1a1a1a; /* 全体の背景色 */
-            overflow: hidden; 
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
-        }
-        .viewer-container { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 15px; }
-        
-        .swiper { 
-            width: 100%; 
-            max-width: 950px; 
-            height: 80vh; 
-            max-height: 580px; 
-            background: #1a1a1a; 
-        }
-        
-        .swiper-slide { 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            background: #1a1a1a;
-        }
-        
-        /* 1P表示（表紙・裏表紙）の時は、中央に綺麗に収まるように幅を制限 */
-        .swiper-slide.single-page canvas {
-            max-width: 50%;
-        }
-        
-        .swiper-slide canvas { 
-            max-width: 100%; 
-            max-height: 100%; 
-            object-fit: contain; 
-            box-shadow: 0 8px 20px rgba(0,0,0,0.5); /* ページに立体感のある影をつける */
-        }
-        
-        /* 左右ボタンのデザイン */
-        .swiper-button-next, .swiper-button-prev { color: #ffffff; background: rgba(0,0,0,0.5); width: 44px; height: 44px; border-radius: 50%; }
-        .swiper-button-next:after, .swiper-button-prev:after { font-size: 18px; font-weight: bold; }
-        
-        /* 下部カウンター */
-        .page-counter { margin-top: 15px; font-size: 13px; color: #eee; background: #333; padding: 5px 16px; border-radius: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
-        #loading { position: absolute; color: #ffffff; font-size: 14px; z-index: 10; background: rgba(0,0,0,0.6); padding: 12px 24px; border-radius: 25px; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Photobook Viewer</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&display=swap');
+
+*{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#111;
+  --surface:#1c1c1c;
+  --border:rgba(255,255,255,0.08);
+  --text:#e8e4dc;
+  --muted:rgba(232,228,220,0.4);
+  --accent:#c8a97e;
+  --spine-w:6px;
+}
+
+html,body{width:100%;height:100%;background:var(--bg);color:var(--text);font-family:'Cormorant Garamond',Georgia,serif;overflow:hidden}
+
+/* ── レイアウト ── */
+#app{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px;padding:12px}
+
+/* ── ローディング ── */
+#loading{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:var(--bg);z-index:100;transition:opacity 0.6s}
+#loading.hide{opacity:0;pointer-events:none}
+.load-ring{width:40px;height:40px;border:1.5px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#load-txt{font-size:13px;letter-spacing:0.15em;color:var(--muted);font-style:italic}
+
+/* ── ブック本体 ── */
+#book-wrap{
+  position:relative;
+  width:100%;
+  max-width:900px;
+  height:clamp(300px,70vh,560px);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+#book{
+  position:relative;
+  height:100%;
+  display:flex;
+  align-items:stretch;
+  box-shadow:0 20px 60px rgba(0,0,0,0.7);
+}
+
+/* 見開き：左右2ページ */
+.page{
+  position:relative;
+  height:100%;
+  overflow:hidden;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#f5f0e8;
+}
+.page canvas{
+  max-width:100%;
+  max-height:100%;
+  display:block;
+}
+
+/* 綴じ部（中央の影） */
+.spine-shadow{
+  position:absolute;
+  top:0;bottom:0;
+  width:var(--spine-w);
+  left:50%;
+  transform:translateX(-50%);
+  background:linear-gradient(to right,rgba(0,0,0,0.25),rgba(0,0,0,0.05),rgba(0,0,0,0.25));
+  z-index:5;
+  pointer-events:none;
+}
+
+/* 単ページ（表紙・裏表紙）：中央に1ページだけ */
+#book.single .page{width:clamp(150px,35vw,380px)}
+/* 見開き */
+#book.double .page{width:clamp(150px,35vw,380px)}
+
+/* ── ナビゲーション矢印 ── */
+.nav-btn{
+  position:absolute;
+  top:50%;transform:translateY(-50%);
+  width:40px;height:40px;
+  border:1px solid var(--border);
+  border-radius:50%;
+  background:rgba(17,17,17,0.7);
+  color:var(--text);
+  font-size:16px;
+  cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:border-color 0.2s,background 0.2s;
+  backdrop-filter:blur(4px);
+  z-index:10;
+  user-select:none;
+}
+.nav-btn:hover{border-color:var(--accent);background:rgba(200,169,126,0.12)}
+.nav-btn:disabled{opacity:0.2;cursor:default}
+#btn-prev{right:calc(100% + 12px)}
+#btn-next{left:calc(100% + 12px)}
+
+/* スマホ：矢印をブック内に */
+@media(max-width:600px){
+  #btn-prev{right:4px;top:auto;bottom:10px;transform:none}
+  #btn-next{left:4px;top:auto;bottom:10px;transform:none}
+}
+
+/* ── サムネイル ── */
+#thumbs{
+  display:flex;gap:6px;
+  overflow-x:auto;
+  width:100%;max-width:900px;
+  padding:4px 2px;
+  scrollbar-width:thin;
+  scrollbar-color:var(--border) transparent;
+}
+#thumbs::-webkit-scrollbar{height:3px}
+#thumbs::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+.thumb{
+  flex-shrink:0;
+  width:48px;height:64px;
+  border:1px solid var(--border);
+  border-radius:2px;
+  background:#2a2a2a;
+  cursor:pointer;
+  overflow:hidden;
+  display:flex;align-items:center;justify-content:center;
+  transition:border-color 0.2s,transform 0.15s;
+  position:relative;
+}
+.thumb:hover{transform:translateY(-2px)}
+.thumb.active{border-color:var(--accent)}
+.thumb canvas{max-width:100%;max-height:100%}
+
+/* ── ページカウンター ── */
+#counter{
+  font-size:12px;letter-spacing:0.2em;color:var(--muted);
+  font-style:italic;
+}
+</style>
 </head>
 <body>
 
-<div class="viewer-container">
-    <div id="loading">フォトブックを読み込み中...</div>
-    
-    <div class="swiper" dir="rtl" style="display:none;">
-        <div class="swiper-wrapper" id="swiper-wrapper">
-            </div>
-        <div class="swiper-button-prev"></div>
-        <div class="swiper-button-next"></div>
+<div id="loading">
+  <div class="load-ring"></div>
+  <p id="load-txt">読み込み中...</p>
+</div>
+
+<div id="app" style="visibility:hidden">
+  <div id="book-wrap">
+    <button class="nav-btn" id="btn-prev" title="前のページ">&#8250;</button>
+
+    <div id="book" class="single">
+      <div class="page" id="page-right"></div>
+      <div class="spine-shadow" id="spine" style="display:none"></div>
+      <div class="page" id="page-left" style="display:none"></div>
     </div>
-    
-    <div class="page-counter" id="counter-box" style="display:none;">
-        <span id="current-page">表紙</span> / <span id="total-pages">0</span>
-    </div>
+
+    <button class="nav-btn" id="btn-next" title="次のページ">&#8249;</button>
+  </div>
+
+  <div id="thumbs"></div>
+  <p id="counter">－</p>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
-
 <script>
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-    const pdfUrl = 'book.pdf'; 
-    const wrapper = document.getElementById('swiper-wrapper');
+// ★ PDFファイル名をここで指定
+const PDF_URL='book.pdf';
 
-    pdfjsLib.getDocument(pdfUrl).promise.then(async function(pdf) {
-        const totalPages = pdf.numPages;
-        document.getElementById('total-pages').textContent = totalPages + "P";
+let pdfDoc=null,totalPages=0,spread=0;
+let isDoublePage=false; // PDFが見開き(横長)かどうか
 
-        // 全ページ分のCanvas（画像データ）を一時的に配列に保持する
-        const pagesData = [];
-        for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-            const page = await pdf.getPage(pageNum);
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
-            const viewport = page.getViewport({ scale: 2.5 }); 
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
+const pageRight=document.getElementById('page-right');
+const pageLeft=document.getElementById('page-left');
+const spine=document.getElementById('spine');
+const book=document.getElementById('book');
+const thumbsEl=document.getElementById('thumbs');
+const counter=document.getElementById('counter');
+const btnPrev=document.getElementById('btn-prev');
+const btnNext=document.getElementById('btn-next');
+const loading=document.getElementById('loading');
+const app=document.getElementById('app');
 
-            const renderContext = { canvasContext: context, viewport: viewport };
-            await page.render(renderContext).promise;
-            pagesData.push(canvas);
-        }
+const cache=new Map();
 
-        // --- パソコン（見開き仕様）用にスライドの構造を手動で組み立てる ---
-        
-        // ① 1ページ目：表紙（独立した1枚のスライドとして作成）
-        const coverSlide = document.createElement('div');
-        coverSlide.className = 'swiper-slide single-page';
-        coverSlide.appendChild(pagesData[0]);
-        coverSlide.setAttribute('data-page-label', '表紙');
-        wrapper.appendChild(coverSlide);
+// ページをcanvasに描画（キャッシュ付き）
+async function renderPage(pNum){
+  if(cache.has(pNum)) return cache.get(pNum);
+  const page=await pdfDoc.getPage(pNum);
+  const vp=page.getViewport({scale:1});
+  // 解像度：デバイスピクセル比に合わせて綺麗に
+  const scale=Math.min(2,window.devicePixelRatio||1)*1.5;
+  const viewport=page.getViewport({scale});
+  const canvas=document.createElement('canvas');
+  canvas.width=viewport.width;
+  canvas.height=viewport.height;
+  canvas.style.maxWidth='100%';
+  canvas.style.maxHeight='100%';
+  await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+  cache.set(pNum,canvas);
+  return canvas;
+}
 
-        // ② 2ページ目から、最後から2番目のページまでを「2枚ペア」でスライドにしていく
-        for (let i = 1; i < totalPages - 1; i += 2) {
-            const pairSlide = document.createElement('div');
-            pairSlide.className = 'swiper-slide';
-            
-            // 右開きの本なので、奇数ページ（右）を先に、偶数ページ（左）を後に並べる
-            if (pagesData[i]) pairSlide.appendChild(pagesData[i]);
-            if (pagesData[i+1]) pairSlide.appendChild(pagesData[i+1]);
-            
-            pairSlide.setAttribute('data-page-label', `${i+1}-${i+2}P`);
-            wrapper.appendChild(pairSlide);
-        }
+// コンテナにcanvasをセット
+async function showInContainer(container,pNum){
+  container.innerHTML='';
+  if(!pNum||pNum<1||pNum>totalPages) return;
+  const c=await renderPage(pNum);
+  container.appendChild(c.cloneNode(true));
+}
 
-        // ③ 最終ページ：裏表紙（奇数ページで終わる仕様に合わせて独立させる）
-        if (totalPages > 1) {
-            const backCoverSlide = document.createElement('div');
-            backCoverSlide.className = 'swiper-slide single-page';
-            backCoverSlide.appendChild(pagesData[totalPages - 1]);
-            backCoverSlide.setAttribute('data-page-label', '裏表紙');
-            wrapper.appendChild(backCoverSlide);
-        }
+// スプレッド計算（右開き）
+// spread=0 → 表紙(p1)のみ
+// spread=1 → p2(右),p3(左)
+// ...
+// 最終: 総ページ数が偶数なら裏表紙(pN)のみ
+function spreadToPages(s){
+  if(s===0) return{right:1,left:null};
+  const r=s*2, l=s*2+1;
+  const hasLeft=l<=totalPages;
+  // 最終スプレッドで右が最終ページ単独（偶数総ページ）
+  if(r===totalPages&&!hasLeft) return{right:r,left:null};
+  return{right:r,left:hasLeft?l:null};
+}
 
-        document.getElementById('loading').style.display = 'none';
-        document.querySelector('.swiper').style.display = 'block';
-        document.getElementById('counter-box').style.display = 'block';
+function totalSpreads(){
+  // 表紙(1) + 本文見開き + 裏表紙
+  return Math.ceil((totalPages-1)/2);
+}
 
-        // Swiper初期化
-        const swiper = new Swiper('.swiper', {
-            rtl: true,
-            loop: false,
-            speed: 450,
-            grabCursor: true,
-            effect: 'slide',
-            slidesPerView: 1, // 各スライド（表紙、または見開きペア）を画面に1つずつ出す
-            navigation: { nextEl: '.swiper-button-next', prevEl: '.swiper-button-prev' },
-            keyboard: { enabled: true },
-            on: {
-                slideChange: function () {
-                    // 現在アクティブなスライドに設定されたページラベルを取得してカウンターに表示
-                    const activeSlide = this.slides[this.activeIndex];
-                    const label = activeSlide.getAttribute('data-page-label');
-                    document.getElementById('current-page').textContent = label;
-                }
-            }
-        });
+async function render(){
+  const{right,left}=spreadToPages(spread);
+  const isSingle=!left;
 
-    }).catch(function(error) {
-        console.error('PDF読み込みエラー: ', error);
-        document.getElementById('loading').textContent = 'PDFファイルの読み込みに失敗しました。';
-    });
+  book.className=isSingle?'single':'double';
+
+  if(isSingle){
+    spine.style.display='none';
+    pageLeft.style.display='none';
+  } else {
+    spine.style.display='block';
+    pageLeft.style.display='flex';
+  }
+
+  await showInContainer(pageRight,right);
+  if(!isSingle) await showInContainer(pageLeft,left);
+
+  // カウンター
+  if(isSingle){
+    counter.textContent=right===1?`表紙 / ${totalPages}P`:`裏表紙 / ${totalPages}P`;
+  } else {
+    counter.textContent=`${right} – ${left} / ${totalPages}P`;
+  }
+
+  btnPrev.disabled=spread<=0;
+  btnNext.disabled=spread>=totalSpreads();
+  updateThumbActive(right,left);
+
+  // 先読み（前後スプレッド）
+  prefetch(spread-1);
+  prefetch(spread+1);
+}
+
+function prefetch(s){
+  if(s<0||s>totalSpreads()) return;
+  const{right,left}=spreadToPages(s);
+  if(right) renderPage(right);
+  if(left) renderPage(left);
+}
+
+function go(dir){
+  const next=spread+dir;
+  if(next<0||next>totalSpreads()) return;
+  spread=next;
+  render();
+}
+
+// キーボード
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft') go(1);
+  if(e.key==='ArrowRight') go(-1);
+});
+
+// サムネイル構築
+async function buildThumbs(){
+  thumbsEl.innerHTML='';
+  const max=Math.min(totalPages,40);
+  for(let i=1;i<=max;i++){
+    const d=document.createElement('div');
+    d.className='thumb';
+    d.title=`${i}ページ`;
+    d.dataset.page=i;
+    thumbsEl.appendChild(d);
+    d.onclick=()=>{
+      if(i===1){spread=0;}
+      else if(i===totalPages&&totalPages%2===0){spread=totalSpreads();}
+      else{spread=Math.ceil((i-1)/2);}
+      render();
+    };
+    // 非同期でサムネイル描画
+    (async()=>{
+      try{
+        const page=await pdfDoc.getPage(i);
+        const vp=page.getViewport({scale:0.12});
+        const c=document.createElement('canvas');
+        c.width=vp.width;c.height=vp.height;
+        await page.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+        d.appendChild(c);
+      }catch(e){}
+    })();
+  }
+}
+
+function updateThumbActive(right,left){
+  document.querySelectorAll('.thumb').forEach(t=>{
+    const p=parseInt(t.dataset.page);
+    t.classList.toggle('active',p===right||p===left);
+  });
+}
+
+// タッチスワイプ
+let touchStartX=0;
+book.addEventListener('touchstart',e=>{touchStartX=e.touches[0].clientX},{passive:true});
+book.addEventListener('touchend',e=>{
+  const dx=e.changedTouches[0].clientX-touchStartX;
+  if(Math.abs(dx)>40){
+    // 右開き：右スワイプ→前へ、左スワイプ→次へ
+    go(dx>0?-1:1);
+  }
+},{passive:true});
+
+// メイン
+(async()=>{
+  try{
+    pdfDoc=await pdfjsLib.getDocument(PDF_URL).promise;
+    totalPages=pdfDoc.numPages;
+    spread=0;
+    loading.classList.add('hide');
+    app.style.visibility='visible';
+    await buildThumbs();
+    await render();
+  }catch(e){
+    document.getElementById('load-txt').textContent='読み込みに失敗しました';
+    console.error(e);
+  }
+})();
+
+btnPrev.onclick=()=>go(-1);
+btnNext.onclick=()=>go(1);
 </script>
-
 </body>
 </html>
