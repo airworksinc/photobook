@@ -3,112 +3,94 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 
 const pdfUrl = './book.pdf';
 
-const isMobile = window.innerWidth < 768;
+const book = document.getElementById('book');
+
+book.innerHTML = `
+  <div style="
+    color:white;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+    font-size:20px;
+  ">
+    Loading PDF...
+  </div>
+`;
 
 async function renderPDF() {
 
-  const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
+  try {
 
-  const totalPages = pdf.numPages;
+    console.log('PDF loading start');
 
-  const pages = [];
+    const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
 
-  for (let i = 1; i <= totalPages; i++) {
+    console.log('PDF loaded');
 
-    const page = await pdf.getPage(i);
+    const totalPages = pdf.numPages;
 
-    const viewport = page.getViewport({
-      scale: isMobile ? 1.5 : 2
-    });
+    console.log('Total pages:', totalPages);
 
-    const canvas = document.createElement('canvas');
+    const pages = [];
 
-    const context = canvas.getContext('2d');
+    for (let i = 1; i <= totalPages; i++) {
 
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
+      console.log('Rendering page:', i);
 
-    await page.render({
-      canvasContext: context,
-      viewport
-    }).promise;
+      const page = await pdf.getPage(i);
 
-    pages.push(canvas.toDataURL('image/jpeg', 0.92));
-  }
+      const viewport = page.getViewport({ scale: 1.5 });
 
-  const book = document.getElementById('book');
+      const canvas = document.createElement('canvas');
 
-  // ===== スマホ =====
-  if (isMobile) {
+      const context = canvas.getContext('2d');
 
-    pages.forEach(src => {
-      addSinglePage(book, src);
-    });
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
 
-  } else {
+      await page.render({
+        canvasContext: context,
+        viewport
+      }).promise;
 
-    // 表紙
-    addSinglePage(book, pages[0]);
-
-    // 中面見開き
-    for (let i = 1; i < pages.length - 1; i += 2) {
-
-      const spread = document.createElement('div');
-
-      spread.className = 'page';
-
-      spread.innerHTML = `
-        <div class="spread">
-          <img src="${pages[i]}">
-          <img src="${pages[i + 1]}">
-        </div>
-      `;
-
-      book.appendChild(spread);
+      pages.push(canvas.toDataURL('image/jpeg', 0.9));
     }
 
-    // 裏表紙
-    addSinglePage(book, pages[pages.length - 1]);
+    console.log('All pages rendered');
+
+    book.innerHTML = '';
+
+    pages.forEach(src => {
+
+      const div = document.createElement('div');
+
+      div.className = 'page';
+
+      div.innerHTML = `
+        <img src="${src}" style="width:100%;">
+      `;
+
+      book.appendChild(div);
+    });
+
+    console.log('HTML added');
+
+  } catch (error) {
+
+    console.error(error);
+
+    book.innerHTML = `
+      <div style="
+        color:red;
+        padding:40px;
+        font-size:18px;
+      ">
+        ERROR:<br><br>
+        ${error.message}
+      </div>
+    `;
   }
-
-  const pageFlip = new St.PageFlip(book, {
-    width: 1000,
-    height: 1414,
-    size: "stretch",
-
-    minWidth: 315,
-    maxWidth: 2000,
-
-    minHeight: 400,
-    maxHeight: 3000,
-
-    maxShadowOpacity: 0.4,
-
-    showCover: true,
-
-    mobileScrollSupport: false,
-
-    usePortrait: true
-  });
-
-  pageFlip.loadFromHTML(
-    document.querySelectorAll('.page')
-  );
-}
-
-function addSinglePage(book, src) {
-
-  const div = document.createElement('div');
-
-  div.className = 'page';
-
-  div.innerHTML = `
-    <div class="single">
-      <img src="${src}">
-    </div>
-  `;
-
-  book.appendChild(div);
 }
 
 renderPDF();
