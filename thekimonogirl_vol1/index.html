@@ -10,7 +10,6 @@
         body, html { width: 100%; height: 100%; background: #1a1a1a; overflow: hidden; font-family: -apple-system, sans-serif; }
         .viewer-container { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 10px; gap: 12px; }
         
-        /* メインビューワーのサイズ指定 */
         .swiper { width: 100%; max-width: 950px; height: 68vh; max-height: 520px; background: #1a1a1a; }
         .swiper-slide { display: flex; justify-content: center; align-items: center; background: #1a1a1a; width: 100% !important; }
         
@@ -22,7 +21,6 @@
         .page-counter { margin-top: 5px; font-size: 13px; color: #eee; background: #333; padding: 5px 16px; border-radius: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); z-index: 20; }
         #loading { position: absolute; color: #ffffff; font-size: 14px; z-index: 100; background: rgba(0,0,0,0.6); padding: 12px 24px; border-radius: 25px; }
 
-        /* サムネイルエリアのスタイル */
         #thumbs-container {
             display: flex; gap: 8px;
             overflow-x: auto;
@@ -85,14 +83,13 @@
     const thumbsContainer = document.getElementById('thumbs-container');
     let pdfDoc = null;
     let swiperInstance = null;
+    const renderedPages = new Map();
 
     function checkIsMobile() {
         return window.innerWidth < 768;
     }
 
-    // ⭕ 【修正】メイン画面用は「毎回新しくCanvasを作って描画する」ことで、画像の剥ぎ取り現象を完全に回避
     async function renderPageToCanvas(pageNum, container) {
-        // すでに中にCanvasが存在している場合は何もしない
         if (container.querySelector(`[data-page="${pageNum}"]`)) return;
 
         const page = await pdfDoc.getPage(pageNum);
@@ -100,7 +97,6 @@
         canvas.setAttribute('data-page', pageNum);
         const context = canvas.getContext('2d');
         
-        // メモリバースト防止のため、PC・スマホ問わず一番安定する scale: 1.8 に固定
         const viewport = page.getViewport({ scale: 1.8 }); 
         canvas.height = viewport.height;
         canvas.width = viewport.width;
@@ -117,9 +113,15 @@
         if (isMobile) {
             document.getElementById('swiper-wrapper').classList.add('is-mobile-view');
             for (let i = 1; i <= totalPages; i++) {
+                // ⭕ 【変更点】Zoom機能を働かせるため、各スライド内に「swiper-zoom-container」の枠を自動追加
                 const slide = document.createElement('div');
                 slide.className = 'swiper-slide single-page';
                 slide.setAttribute('data-pages', JSON.stringify([i]));
+                
+                const zoomWrap = document.createElement('div');
+                zoomWrap.className = 'swiper-zoom-container';
+                slide.appendChild(zoomWrap);
+
                 if (i === 1) slide.setAttribute('data-label', '表紙');
                 else if (i === totalPages && totalPages % 2 === 0) slide.setAttribute('data-label', '裏表紙');
                 else slide.setAttribute('data-label', `${i}P`);
@@ -127,31 +129,44 @@
             }
         } else {
             document.getElementById('swiper-wrapper').classList.remove('is-mobile-view');
+            
+            // 表紙
             const coverSlide = document.createElement('div');
             coverSlide.className = 'swiper-slide single-page';
             coverSlide.setAttribute('data-pages', JSON.stringify([1]));
             coverSlide.setAttribute('data-label', '表紙');
+            const zoomWrap = document.createElement('div');
+            zoomWrap.className = 'swiper-zoom-container';
+            coverSlide.appendChild(zoomWrap);
             wrapper.appendChild(coverSlide);
 
+            // 見開き
             for (let i = 2; i < totalPages; i += 2) {
                 const pairSlide = document.createElement('div');
                 pairSlide.className = 'swiper-slide';
                 pairSlide.setAttribute('data-pages', JSON.stringify([i, i + 1]));
                 pairSlide.setAttribute('data-label', `${i}-${i+1}P`);
+                
+                const zoomWrapPair = document.createElement('div');
+                zoomWrapPair.className = 'swiper-zoom-container';
+                pairSlide.appendChild(zoomWrapPair);
                 wrapper.appendChild(pairSlide);
             }
 
+            // 裏表紙
             if (totalPages % 2 === 0) {
                 const backSlide = document.createElement('div');
                 backSlide.className = 'swiper-slide single-page';
                 backSlide.setAttribute('data-pages', JSON.stringify([totalPages]));
                 backSlide.setAttribute('data-label', '裏表紙');
+                const zoomWrapBack = document.createElement('div');
+                zoomWrapBack.className = 'swiper-zoom-container';
+                backSlide.appendChild(zoomWrapBack);
                 wrapper.appendChild(backSlide);
             }
         }
     }
 
-    // サムネイル専用の個別レンダリング（メイン用とは一切干渉させない）
     async function buildThumbnails() {
         thumbsContainer.innerHTML = '';
         const totalPages = pdfDoc.numPages;
@@ -172,7 +187,6 @@
                 }
             };
 
-            // 負荷を極限まで下げるために、1枚ずつ完全に独立して極小サイズを生成
             setTimeout(async () => {
                 try {
                     const page = await pdfDoc.getPage(i);
@@ -213,6 +227,14 @@
             speed: 500, 
             grabCursor: true,
             slidesPerView: 1,
+            
+            // ⭕ 【変更点】SwiperのZoom設定を追加有効化
+            zoom: {
+                maxRatio: 3,     // 最大3倍までアップ可能に設定
+                minRatio: 1,
+                toggle: true,    // ダブルタップ（ダブルクリック）でのズーム切替をON
+            },
+            
             effect: 'creative',
             creativeEffect: {
                 prev: { shadow: true, translate: [0, 0, -400] },
@@ -250,8 +272,11 @@
                 const slide = swiperInstance.slides[index];
                 const pages = JSON.parse(slide.getAttribute('data-pages'));
                 
+                // ⭕ 【変更点】Canvasの追加先をスライド直下ではなく「swiper-zoom-container」の箱に変更
+                const targetContainer = slide.querySelector('.swiper-zoom-container') || slide;
+
                 for (const pNum of pages) {
-                    await renderPageToCanvas(pNum, slide);
+                    await renderPageToCanvas(pNum, targetContainer);
                 }
                 swiperInstance.update(); 
             }
