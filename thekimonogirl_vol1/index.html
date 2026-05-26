@@ -10,11 +10,9 @@
         body, html { width: 100%; height: 100%; background: #1a1a1a; overflow: hidden; font-family: -apple-system, sans-serif; }
         .viewer-container { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 10px; gap: 12px; }
         
-        /* ビューワー（メイン）全体のサイズ設定 */
         .swiper { width: 100%; max-width: 950px; height: 68vh; max-height: 520px; background: #1a1a1a; }
         .swiper-slide { display: flex; justify-content: center; align-items: center; background: #1a1a1a; width: 100% !important; }
         
-        /* PC環境：単一（表紙など）の時は最大50%幅に */
         #book-wrapper:not(.is-mobile-view) .swiper-slide.single-page canvas { max-width: 50% !important; }
 
         .swiper-slide canvas { max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 8px 20px rgba(0,0,0,0.5); background: #1a1a1a; }
@@ -23,7 +21,6 @@
         .page-counter { margin-top: 5px; font-size: 13px; color: #eee; background: #333; padding: 5px 16px; border-radius: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); z-index: 20; }
         #loading { position: absolute; color: #ffffff; font-size: 14px; z-index: 100; background: rgba(0,0,0,0.6); padding: 12px 24px; border-radius: 25px; }
 
-        /* ── ② 下部サムネイルエリアのスタイル ── */
         #thumbs-container {
             display: flex; gap: 8px;
             overflow-x: auto;
@@ -48,11 +45,9 @@
             transition: border-color 0.2s, transform 0.15s;
         }
         .thumb-box:hover { transform: translateY(-2px); }
-        /* アクティブなページのサムネイルを会社の雰囲気に合わせた上品なゴールド枠に */
         .thumb-box.active { border-color: #c8a97e; box-shadow: 0 0 8px rgba(200,169,126,0.5); }
         .thumb-box canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
 
-        /* スマホ専用の調整 */
         @media (max-width: 767px) {
             .swiper { height: 55vh; }
             .swiper-slide canvas { max-width: 100% !important; }
@@ -94,7 +89,6 @@
         return window.innerWidth < 768;
     }
 
-    // メイン用の高画質描画
     async function renderPageToCanvas(pageNum, container) {
         if (renderedPages.has(pageNum)) {
             container.appendChild(renderedPages.get(pageNum).cloneNode(true));
@@ -115,7 +109,6 @@
         container.appendChild(canvas.cloneNode(true));
     }
 
-    // スライド構造の動的組み立て
     function buildSlides() {
         wrapper.innerHTML = '';
         const totalPages = pdfDoc.numPages;
@@ -127,7 +120,7 @@
                 const slide = document.createElement('div');
                 slide.className = 'swiper-slide single-page';
                 slide.setAttribute('data-pages', JSON.stringify([i]));
-                slide.setAttribute('data-slide-index', i - 1); // サムネイル連動用
+                slide.setAttribute('data-slide-index', i - 1);
                 if (i === 1) slide.setAttribute('data-label', '表紙');
                 else if (i === totalPages && totalPages % 2 === 0) slide.setAttribute('data-label', '裏表紙');
                 else slide.setAttribute('data-label', `${i}P`);
@@ -135,7 +128,6 @@
             }
         } else {
             document.getElementById('swiper-wrapper').classList.remove('is-mobile-view');
-            // 表紙
             const coverSlide = document.createElement('div');
             coverSlide.className = 'swiper-slide single-page';
             coverSlide.setAttribute('data-pages', JSON.stringify([1]));
@@ -143,11 +135,148 @@
             coverSlide.setAttribute('data-label', '表紙');
             wrapper.appendChild(coverSlide);
 
-            // 中身見開き
             let slideIdx = 1;
             for (let i = 2; i < totalPages; i += 2) {
                 const pairSlide = document.createElement('div');
                 pairSlide.className = 'swiper-slide';
                 pairSlide.setAttribute('data-pages', JSON.stringify([i, i + 1]));
                 pairSlide.setAttribute('data-slide-index', slideIdx);
-                pairSlide.setAttribute('data-
+                pairSlide.setAttribute('data-label', `${i}-${i+1}P`);
+                wrapper.appendChild(pairSlide);
+                slideIdx++;
+            }
+
+            if (totalPages % 2 === 0) {
+                const backSlide = document.createElement('div');
+                backSlide.className = 'swiper-slide single-page';
+                backSlide.setAttribute('data-pages', JSON.stringify([totalPages]));
+                backSlide.setAttribute('data-slide-index', slideIdx);
+                backSlide.setAttribute('data-label', '裏表紙');
+                wrapper.appendChild(backSlide);
+            }
+        }
+    }
+
+    async function buildThumbnails() {
+        thumbsContainer.innerHTML = '';
+        const totalPages = pdfDoc.numPages;
+
+        for (let i = 1; i <= totalPages; i++) {
+            const thumbBox = document.createElement('div');
+            thumbBox.className = 'thumb-box';
+            thumbBox.setAttribute('id', `thumb-${i}`);
+            thumbBox.setAttribute('data-page-num', i);
+            thumbsContainer.appendChild(thumbBox);
+
+            thumbBox.onclick = () => {
+                if (checkIsMobile()) {
+                    swiperInstance.slideTo(i - 1);
+                } else {
+                    if (i === 1) swiperInstance.slideTo(0);
+                    else if (i === totalPages && totalPages % 2 === 0) swiperInstance.slideTo(swiperInstance.slides.length - 1);
+                    else swiperInstance.slideTo(Math.ceil((i - 1) / 2));
+                }
+            };
+
+            setTimeout(async () => {
+                try {
+                    const page = await pdfDoc.getPage(i);
+                    const vp = page.getViewport({ scale: 0.1 });
+                    const canvas = document.createElement('canvas');
+                    canvas.width = vp.width; canvas.height = vp.height;
+                    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+                    thumbBox.appendChild(canvas);
+                } catch (e) { console.error(e); }
+            }, i * 20);
+        }
+    }
+
+    function updateThumbnailActive(swiperInstance) {
+        document.querySelectorAll('.thumb-box').forEach(t => t.classList.remove('active'));
+        
+        const activeSlide = swiperInstance.slides[swiperInstance.activeIndex];
+        const pages = JSON.parse(activeSlide.getAttribute('data-pages'));
+
+        pages.forEach(pNum => {
+            const activeThumb = document.getElementById(`thumb-${pNum}`);
+            if (activeThumb) {
+                activeThumb.classList.add('active');
+                thumbsContainer.scrollTo({
+                    left: activeThumb.offsetLeft - thumbsContainer.offsetWidth / 2 + activeThumb.offsetWidth / 2,
+                    behavior: 'smooth'
+                });
+            }
+        });
+    }
+
+    function initSwiper() {
+        if (swiperInstance) swiperInstance.destroy(true, true);
+
+        swiperInstance = new Swiper('.swiper', {
+            rtl: true,
+            loop: false,
+            speed: 500, 
+            grabCursor: true,
+            slidesPerView: 1,
+            effect: 'creative',
+            creativeEffect: {
+                prev: { shadow: true, translate: [0, 0, -400] },
+                next: { translate: ['-100%', 0, 0] },
+            },
+            navigation: { nextEl: '.swiper-button-next', prevEl: '.swiper-button-prev' },
+            keyboard: { enabled: true },
+            on: {
+                init: function () {
+                    loadVisiblePages(this);
+                    updateCounter(this);
+                    updateThumbnailActive(this);
+                },
+                slideChange: function () {
+                    loadVisiblePages(this);
+                    updateCounter(this);
+                    updateThumbnailActive(this);
+                }
+            }
+        });
+    }
+
+    function updateCounter(swiperInstance) {
+        const activeSlide = swiperInstance.slides[swiperInstance.activeIndex];
+        const label = activeSlide.getAttribute('data-label');
+        document.getElementById('current-page').textContent = label;
+    }
+
+    async function loadVisiblePages(swiperInstance) {
+        const activeIndex = swiperInstance.activeIndex;
+        const targets = [activeIndex - 1, activeIndex, activeIndex + 1];
+
+        for (const index of targets) {
+            if (index >= 0 && index < swiperInstance.slides.length) {
+                const slide = swiperInstance.slides[index];
+                const pages = JSON.parse(slide.getAttribute('data-pages'));
+                
+                if (slide.querySelectorAll('canvas').length === 0) {
+                    for (const pNum of pages) {
+                        await renderPageToCanvas(pNum, slide);
+                    }
+                    swiperInstance.update(); 
+                }
+            }
+        }
+    }
+
+    pdfjsLib.getDocument(pdfUrl).promise.then(async function(pdf) {
+        pdfDoc = pdf;
+        document.getElementById('total-pages').textContent = pdf.numPages + "P";
+
+        buildSlides();
+        // ⭕ タイポを完全に修正しました
+        await buildThumbnails(); 
+        
+        document.getElementById('loading').style.display = 'none';
+        document.querySelector('.swiper').style.display = 'block';
+        document.getElementById('counter-box').style.display = 'block';
+
+        initSwiper();
+
+        let
