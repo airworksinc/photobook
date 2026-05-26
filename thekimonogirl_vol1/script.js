@@ -1,7 +1,7 @@
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-const pdfUrl = './pdf/book.pdf';
+const pdfUrl = './book.pdf';
 
 const isMobile = window.innerWidth < 768;
 
@@ -13,12 +13,13 @@ async function renderPDF() {
 
   const pages = [];
 
-  // PDFを画像化
   for (let i = 1; i <= totalPages; i++) {
 
     const page = await pdf.getPage(i);
 
-    const viewport = page.getViewport({ scale: 2 });
+    const viewport = page.getViewport({
+      scale: isMobile ? 1.5 : 2
+    });
 
     const canvas = document.createElement('canvas');
 
@@ -32,22 +33,16 @@ async function renderPDF() {
       viewport
     }).promise;
 
-    pages.push(canvas.toDataURL('image/jpeg', 0.95));
+    pages.push(canvas.toDataURL('image/jpeg', 0.92));
   }
 
   const book = document.getElementById('book');
 
-  // スマホ
+  // ===== スマホ =====
   if (isMobile) {
 
     pages.forEach(src => {
-
-      const div = document.createElement('div');
-      div.className = 'page';
-
-      div.innerHTML = `<img src="${src}">`;
-
-      book.appendChild(div);
+      addSinglePage(book, src);
     });
 
   } else {
@@ -55,7 +50,7 @@ async function renderPDF() {
     // 表紙
     addSinglePage(book, pages[0]);
 
-    // 見開き
+    // 中面見開き
     for (let i = 1; i < pages.length - 1; i += 2) {
 
       const spread = document.createElement('div');
@@ -63,9 +58,9 @@ async function renderPDF() {
       spread.className = 'page';
 
       spread.innerHTML = `
-        <div style="display:flex;width:100%;height:100%;">
-          <img src="${pages[i]}" style="width:50%;">
-          <img src="${pages[i+1]}" style="width:50%;">
+        <div class="spread">
+          <img src="${pages[i]}">
+          <img src="${pages[i + 1]}">
         </div>
       `;
 
@@ -76,18 +71,29 @@ async function renderPDF() {
     addSinglePage(book, pages[pages.length - 1]);
   }
 
-  new St.PageFlip(book, {
+  const pageFlip = new St.PageFlip(book, {
     width: 1000,
-    height: 1400,
+    height: 1414,
     size: "stretch",
+
     minWidth: 315,
     maxWidth: 2000,
+
     minHeight: 400,
     maxHeight: 3000,
-    maxShadowOpacity: 0.5,
+
+    maxShadowOpacity: 0.4,
+
     showCover: true,
-    mobileScrollSupport: false
-  }).loadFromHTML(document.querySelectorAll('.page'));
+
+    mobileScrollSupport: false,
+
+    usePortrait: true
+  });
+
+  pageFlip.loadFromHTML(
+    document.querySelectorAll('.page')
+  );
 }
 
 function addSinglePage(book, src) {
@@ -96,7 +102,11 @@ function addSinglePage(book, src) {
 
   div.className = 'page';
 
-  div.innerHTML = `<img src="${src}">`;
+  div.innerHTML = `
+    <div class="single">
+      <img src="${src}">
+    </div>
+  `;
 
   book.appendChild(div);
 }
