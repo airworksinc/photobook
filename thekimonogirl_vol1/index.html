@@ -1,1 +1,195 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photo Book Viewer</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
+    
+    <style>
+        /* --- [デザインカスタマイズエリア] --- */
+        * { 
+            box-sizing: border-box; 
+            margin: 0; 
+            padding: 0; 
+        }
+        body, html { 
+            width: 100%; 
+            height: 100%; 
+            /* ① 全体の背景色（写真を引き立たせるために高級感のある暗めのグレーにしています） */
+            background: #1a1a1a; 
+            overflow: hidden; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+        }
+        
+        /* 全体を表示するコンテナ */
+        .viewer-container { 
+            width: 100%; 
+            height: 100%; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+            padding: 15px; 
+        }
+        
+        /* ② ビューワー（本）のサイズと枠線の設定 */
+        .swiper { 
+            width: 100%; 
+            max-width: 950px; /* 見開き（横長）が綺麗に収まる最大幅 */
+            height: 80vh;     /* 画面の高さに対する比率 */
+            max-height: 580px; 
+            background: #ffffff; 
+            border-radius: 4px; /* 本の角丸（0pxにするとキッチリした四角になります） */
+            /* 本の後ろに落とす影（立体感を演出） */
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4); 
+        }
+        
+        .swiper-slide { 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            background: #ffffff; 
+        }
+        
+        /* PDFをレンダリングするCanvasの調整 */
+        .swiper-slide canvas { 
+            max-width: 100%; 
+            max-height: 100%; 
+            object-fit: contain; 
+        }
+        
+        /* ③ 左右のページ移動ボタン（矢印）のデザイン */
+        .swiper-button-next, .swiper-button-prev { 
+            color: #ffffff;             /* 矢印自体の色 */
+            background: rgba(0,0,0,0.4); /* 丸い背景の色（半透明の黒） */
+            width: 44px; 
+            height: 44px; 
+            border-radius: 50%; 
+            transition: background 0.3s;
+        }
+        .swiper-button-next:hover, .swiper-button-prev:hover {
+            background: rgba(0,0,0,0.7); /* マウスを乗せたときに少し濃くする */
+        }
+        .swiper-button-next:after, .swiper-button-prev:after { 
+            font-size: 18px; 
+            font-weight: bold; 
+        }
+        
+        /* ④ 下部ページカウンターのデザイン */
+        .page-counter { 
+            margin-top: 15px; 
+            font-size: 13px; 
+            color: #eeeeee;         /* 文字の色 */
+            background: #333333;     /* バッジの背景色 */
+            padding: 5px 16px; 
+            border-radius: 20px; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            letter-spacing: 1px;
+        }
+        
+        /* PDF読み込み中のローディング画面 */
+        #loading { 
+            position: absolute; 
+            color: #ffffff; 
+            font-size: 14px; 
+            z-index: 10; 
+            background: rgba(0,0,0,0.6); 
+            padding: 12px 24px; 
+            border-radius: 25px; 
+        }
+    </style>
+</head>
+<body>
 
+<div class="viewer-container">
+    <div id="loading">フォトブックを読み込み中...</div>
+    
+    <div class="swiper" dir="rtl" style="display:none;">
+        <div class="swiper-wrapper" id="swiper-wrapper">
+            </div>
+        <div class="swiper-button-prev"></div>
+        <div class="swiper-button-next"></div>
+    </div>
+    
+    <div class="page-counter" id="counter-box" style="display:none;">
+        <span id="current-page">1</span> / <span id="total-pages">0</span>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+
+<script>
+    // PDF.jsのバックグラウンド処理（ワーカー）を設定
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    // 【重要】同じフォルダ内に置いたPDFファイル名を指定
+    const pdfUrl = 'book.pdf'; 
+
+    const wrapper = document.getElementById('swiper-wrapper');
+
+    // PDFの読み込みと自動Canvas（画像）変換処理
+    pdfjsLib.getDocument(pdfUrl).promise.then(async function(pdf) {
+        const totalPages = pdf.numPages;
+        document.getElementById('total-pages').textContent = totalPages;
+
+        // 全ページをループ処理
+        for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+            const page = await pdf.getPage(pageNum);
+            const slide = document.createElement('div');
+            slide.className = 'swiper-slide';
+            
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            
+            // 見開き横長PDFを高画質で鮮明に表示させるため、倍率（scale）を2.5に設定
+            const viewport = page.getViewport({ scale: 2.5 }); 
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+
+            const renderContext = { 
+                canvasContext: context, 
+                viewport: viewport 
+            };
+            await page.render(renderContext).promise;
+            
+            slide.appendChild(canvas);
+            wrapper.appendChild(slide);
+        }
+
+        // 読み込みがすべて完了したら表示を切り替え
+        document.getElementById('loading').style.display = 'none';
+        document.querySelector('.swiper').style.display = 'block';
+        document.getElementById('counter-box').style.display = 'block';
+
+        // 右開き・スライド式ビューワー（Swiper）の起動設定
+        const swiper = new Swiper('.swiper', {
+            rtl: true,         // 右開きモード（右から左へ進む）を有効化
+            loop: false,       // 最後のページで止める
+            speed: 450,        // ページがスライドするスピード（ミリ秒）
+            grabCursor: true,  // マウスを乗せたときに手のアイコンにする
+            effect: 'slide',   // 見開き画像が綺麗に滑るスライドエフェクトを指定
+            navigation: { 
+                nextEl: '.swiper-button-next', 
+                prevEl: '.swiper-button-prev' 
+            },
+            keyboard: {
+                enabled: true, // キーボードの左右矢印キーでの操作も可能にする
+            },
+            on: {
+                // ページが切り替わったときに下部のカウンター数値を同期
+                slideChange: function () {
+                    document.getElementById('current-page').textContent = this.activeIndex + 1;
+                }
+            }
+        });
+
+    }).catch(function(error) {
+        console.error('PDF読み込みエラー: ', error);
+        document.getElementById('loading').textContent = 'PDFファイルの読み込みに失敗しました。名前（book.pdf）が合っているか確認してください。';
+    });
+</script>
+
+</body>
+</html>
