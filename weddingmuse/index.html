@@ -14,10 +14,10 @@
         .swiper { width: 100%; max-width: 950px; height: 68vh; max-height: 520px; background: rgba(26, 26, 26, 0.85); }
         .swiper-slide { display: flex; justify-content: center; align-items: center; background: rgba(26, 26, 26, 0.85); width: 100% !important; overflow: hidden; }
         
-        /* PC表示・共通：基本はコンテナの中に綺麗に収めます */
+        /* PC表示・共通：基本設定 */
         .swiper-slide canvas { max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 8px 20px rgba(0,0,0,0.4); background: rgba(26, 26, 26, 0.85); }
         
-        /* 表紙・裏表紙の単一縦長ページがPCで横に広がりすぎるのを防御 */
+        /* PCで単一縦長ページ（表紙など）が横に広がりすぎるのを防御 */
         .swiper-slide.single-page canvas { max-width: 50% !important; }
 
         .swiper-button-next, .swiper-button-prev { color: #ffffff; background: rgba(0,0,0,0.5); width: 44px; height: 44px; border-radius: 50%; z-index: 20; }
@@ -56,8 +56,11 @@
         @media (max-width: 767px) {
             .swiper { height: 55vh; }
             
-            /* ⭕【スマホ表示サイズ修正】中身（カット済み画像）も表紙も、スマホの縦幅の限界（100%）まで絶対に引き伸ばす指定 */
-            .swiper-slide canvas { width: 100% !important; height: 100% !important; max-width: 100% !important; max-height: 100% !important; object-fit: contain !important; }
+            /* 中身（カット済み画像）も表紙も、スマホのコンテナ高さの限界（100%）まで絶対に引き伸ばす指定 */
+            .swiper-slide canvas { width: auto !important; height: 100% !important; max-width: 100% !important; max-height: 100% !important; object-fit: contain !important; }
+            
+            /* ⭕【バグ修正】スマホの表紙・裏表紙の箱自体が横に潰れないよう、フレックス配置を調整 */
+            .swiper-slide.single-page { display: flex !important; justify-content: center !important; align-items: center !important; width: 100% !important; height: 100% !important; }
             
             .swiper-button-next { right: 5px; }
             .swiper-button-prev { left: 5px; }
