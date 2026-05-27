@@ -11,15 +11,13 @@
         body, html { width: 100%; height: 100%; background: rgba(26, 26, 26, 0.85); overflow: hidden; font-family: -apple-system, sans-serif; }
         .viewer-container { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 10px; gap: 12px; }
         
-        /* コンテナの横幅をしっかり広げて見開きに最適化 */
         .swiper { width: 100%; max-width: 1000px; height: 72vh; max-height: 560px; background: rgba(26, 26, 26, 0.85); }
-        /* flex-direction: row-reverse にすることでRTL環境下でのCanvasの左右固着を完全リセット */
+        
+        /* ⭕【vol.2専用変更】flex-direction を row-reverse にして並び順のベースを反転 */
         .swiper-slide { display: flex; justify-content: center; align-items: center; background: rgba(26, 26, 26, 0.85); width: 100% !important; gap: 0; flex-direction: row-reverse; }
         
-        /* PC表示で行き別れや縮小が起きないよう横幅100%・縦100%で綺麗に引き伸ばす設定 */
         .swiper-slide canvas { width: auto; height: auto; max-width: 50%; max-height: 100%; object-fit: contain; box-shadow: 0 8px 20px rgba(0,0,0,0.4); background: rgba(26, 26, 26, 0.85); }
         
-        /* スマホ・表紙・裏表紙などの単一ページは横幅が広がりすぎないよう制御 */
         .swiper-slide.single-page canvas { max-width: 100% !important; max-height: 100% !important; width: auto !important; }
 
         .swiper-button-next, .swiper-button-prev { color: #ffffff; background: rgba(0,0,0,0.5); width: 44px; height: 44px; border-radius: 50%; z-index: 20; }
@@ -95,7 +93,6 @@
         return window.innerWidth < 768;
     }
 
-    // ⭕【最適化】RTL環境の並び順バグを完全に修正するアペンドロジック
     async function renderPageToCanvas(pageNum, container) {
         if (container.querySelector(`[data-page="${pageNum}"]`)) return;
 
@@ -110,10 +107,17 @@
 
         await page.render({ canvasContext: context, viewport: viewport }).promise;
         
-        // ページ番号の大小を判定し、常に[左側が大きな数字、右側が小さな数字]になるように強制ソートしてアペンド
-        const pagesInSlide = JSON.parse(container.getAttribute('data-pages'));
-        if (pagesInSlide.length === 2 && pageNum === pagesInSlide[0]) {
-            container.insertBefore(canvas, container.firstChild);
+        const existingCanvas = container.querySelector('canvas');
+        
+        if (existingCanvas) {
+            const existingPageNum = parseInt(existingCanvas.getAttribute('data-page'), 10);
+            
+            // ⭕【vol.2専用変更】不等号を「>」に反転し、逆向きのデータ順をここで相殺・補正します
+            if (pageNum > existingPageNum) {
+                container.insertBefore(canvas, existingCanvas);
+            } else {
+                container.appendChild(canvas);
+            }
         } else {
             container.appendChild(canvas);
         }
@@ -210,6 +214,20 @@
         });
     }
 
+    // ── 【新規追加】全スライドの初期配置を反転環境に対応させるための補正ロジック ──
+    function fixVol2SlideOrder(swiperInstance) {
+        swiperInstance.slides.forEach(slide => {
+            const canvases = Array.from(slide.querySelectorAll('canvas'));
+            if (canvases.length === 2) {
+                const p1 = parseInt(canvases[0].getAttribute('data-page'), 10);
+                const p2 = parseInt(canvases[1].getAttribute('data-page'), 10);
+                if (p1 < p2) {
+                    slide.insertBefore(canvases[1], canvases[0]);
+                }
+            }
+        });
+    }
+
     function initSwiper() {
         if (swiperInstance) swiperInstance.destroy(true, true);
 
@@ -259,6 +277,7 @@
                 for (const pNum of pages) {
                     await renderPageToCanvas(pNum, slide);
                 }
+                fixVol2SlideOrder(swiperInstance); // 描画後に並びをダブルチェック
                 swiperInstance.update(); 
             }
         }
