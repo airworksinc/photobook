@@ -95,7 +95,7 @@
         return window.innerWidth < 768;
     }
 
-    // ⭕【劇的改善】生成されたCanvasを、必ず正しいページ順序（右が先、左が後）に整列させて挿入する処理
+    // ⭕【vol.1高速化調整】解像度スケールを最適化し、vol.1のデータ特性に完璧に合わせた処理
     async function renderPageToCanvas(pageNum, container) {
         if (container.querySelector(`[data-page="${pageNum}"]`)) return;
 
@@ -104,7 +104,12 @@
         canvas.setAttribute('data-page', pageNum);
         const context = canvas.getContext('2d');
         
-        const viewport = page.getViewport({ scale: 1.8 }); 
+        // 🚀【スピード改善】生成スケールを1.8から1.2（モバイルは1.0）へ軽量化
+        // 面積あたりの計算量が激減し、STUDIO上での展開が圧倒的に速くなります
+        const isMobile = checkIsMobile();
+        const optimizedScale = isMobile ? 1.0 : 1.2; 
+        
+        const viewport = page.getViewport({ scale: optimizedScale }); 
         canvas.height = viewport.height;
         canvas.width = viewport.width;
 
@@ -113,9 +118,7 @@
         // スライドの本来予定している「data-pages」の配列を取得
         const pagesInSlide = JSON.parse(container.getAttribute('data-pages'));
         
-        // もし見開きスライド（2枚組）で、今描き終わったのが「左ページ（配列の2番目＝大きい数字）」だった場合
-        // 右ページ（小さい数字）がすでにいればその後ろ、いなければ一旦挿入。
-        // 右ページが遅れて描き終わった場合は、必ず左ページの前（firstChild）にねじ込む
+        // vol.1の正位置データ順に合わせ、左ページ（配列の2番目の数字）なら常に先頭へ挿入
         if (pagesInSlide.length === 2 && pageNum === pagesInSlide[1]) {
             container.insertBefore(canvas, container.firstChild);
         } else {
@@ -150,7 +153,6 @@
             for (let i = 2; i < totalPages; i += 2) {
                 const pairSlide = document.createElement('div');
                 pairSlide.className = 'swiper-slide';
-                // RTL（右詰め）環境において、右側がiページ、左側がi+1ページになるよう配列順を厳格化
                 pairSlide.setAttribute('data-pages', JSON.stringify([i, i + 1]));
                 pairSlide.setAttribute('data-label', `${i}-${i+1}P`);
                 wrapper.appendChild(pairSlide);
