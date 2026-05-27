@@ -12,9 +12,9 @@
         .viewer-container { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 10px; gap: 12px; }
         
         .swiper { width: 100%; max-width: 950px; height: 68vh; max-height: 520px; background: rgba(26, 26, 26, 0.85); }
-        .swiper-slide { display: flex; justify-content: center; align-items: center; background: rgba(26, 26, 26, 0.85); width: 100% !important; }
+        .swiper-slide { display: flex; justify-content: center; align-items: center; background: rgba(26, 26, 26, 0.85); width: 100% !important; overflow: hidden; }
         
-        /* CSSは極めてシンプルに。画像は常にコンテナに100%フィットさせます */
+        /* PC表示・共通：基本はコンテナの中に綺麗に収めます */
         .swiper-slide canvas { max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 8px 20px rgba(0,0,0,0.4); background: rgba(26, 26, 26, 0.85); }
         
         /* 表紙・裏表紙の単一縦長ページがPCで横に広がりすぎるのを防御 */
@@ -52,9 +52,13 @@
         .thumb-box.active { border-color: #c8a97e; box-shadow: 0 0 8px rgba(200,169,126,0.5); }
         .thumb-box canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
 
+        /* 📱スマホ表示（縦画面）の際の絶対最大サイズ最適化 */
         @media (max-width: 767px) {
             .swiper { height: 55vh; }
-            .swiper-slide canvas { max-width: 100% !important; width: auto !important; object-fit: contain !important; }
+            
+            /* ⭕【スマホ表示サイズ修正】中身（カット済み画像）も表紙も、スマホの縦幅の限界（100%）まで絶対に引き伸ばす指定 */
+            .swiper-slide canvas { width: 100% !important; height: 100% !important; max-width: 100% !important; max-height: 100% !important; object-fit: contain !important; }
+            
             .swiper-button-next { right: 5px; }
             .swiper-button-prev { left: 5px; }
             #thumbs-container { max-width: 100%; }
@@ -92,47 +96,39 @@
         return window.innerWidth < 768;
     }
 
-    // ⭕【コアロジック刷新】横長見開きPDFを、スマホ表示の時だけプログラム側で物理的に真っ二つにカットして描画する処理
     async function renderPageToCanvas(pageNum, container) {
-        const side = container.getAttribute('data-side') || 'both'; // 'right', 'left', 'both'
+        const side = container.getAttribute('data-side') || 'both';
         const cacheKey = `${pageNum}-${side}`;
         if (container.querySelector(`[data-render-key="${cacheKey}"]`)) return;
 
         const page = await pdfDoc.getPage(pageNum);
         
-        // 処理速度向上のためスケールは1.2（モバイルは1.0）
         const isMobile = checkIsMobile();
         const optimizedScale = isMobile ? 1.0 : 1.2;
         const viewport = page.getViewport({ scale: optimizedScale });
 
-        // 一時的に裏側でPDFのオリジナルサイズを描画するための隠しCanvasを作成
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = viewport.width;
         tempCanvas.height = viewport.height;
         const tempContext = tempCanvas.getContext('2d');
         await page.render({ canvasContext: tempContext, viewport: viewport }).promise;
 
-        // 実際に画面に配置するCanvasを作成
         const finalCanvas = document.createElement('canvas');
         finalCanvas.setAttribute('data-render-key', cacheKey);
         const finalContext = finalCanvas.getContext('2d');
 
         if (side === 'both') {
-            // PC表示：そのまま全体をコピー
             finalCanvas.width = viewport.width;
             finalCanvas.height = viewport.height;
             finalContext.drawImage(tempCanvas, 0, 0);
         } else {
-            // スマホ表示：横幅を半分にクリップして転写
             const halfWidth = viewport.width / 2;
             finalCanvas.width = halfWidth;
             finalCanvas.height = viewport.height;
 
             if (side === 'right') {
-                // 右半分（偶数P）を切り出して転写
                 finalContext.drawImage(tempCanvas, halfWidth, 0, halfWidth, viewport.height, 0, 0, halfWidth, viewport.height);
             } else if (side === 'left') {
-                // 左半分（奇数P）を切り出して転写
                 finalContext.drawImage(tempCanvas, 0, 0, halfWidth, viewport.height, 0, 0, halfWidth, viewport.height);
             }
         }
@@ -146,8 +142,6 @@
         const isMobile = checkIsMobile();
 
         if (isMobile) {
-            // 📱スマホ：見開きデータを「右半分」「左半分」の独立した箱として完全に分解して生成
-            // 表紙（1ページ目）
             let slide = document.createElement('div');
             slide.className = 'swiper-slide single-page';
             slide.setAttribute('data-pages', JSON.stringify([1]));
@@ -155,11 +149,9 @@
             slide.setAttribute('data-label', '表紙');
             wrapper.appendChild(slide);
 
-            // 中身（2〜20ページ目）
             for (let i = 2; i < totalPages; i++) {
                 const pageStart = (i - 1) * 2;
                 
-                // 右側（偶数P）用の独立したスライド
                 let slideR = document.createElement('div');
                 slideR.className = 'swiper-slide';
                 slideR.setAttribute('data-pages', JSON.stringify([i]));
@@ -167,7 +159,6 @@
                 slideR.setAttribute('data-label', `${pageStart}P`);
                 wrapper.appendChild(slideR);
 
-                // 左側（奇数P）用の独立したスライド
                 let slideL = document.createElement('div');
                 slideL.className = 'swiper-slide';
                 slideL.setAttribute('data-pages', JSON.stringify([i]));
@@ -176,7 +167,6 @@
                 wrapper.appendChild(slideL);
             }
 
-            // 裏表紙（21ページ目）
             let backSlide = document.createElement('div');
             backSlide.className = 'swiper-slide single-page';
             backSlide.setAttribute('data-pages', JSON.stringify([totalPages]));
@@ -184,7 +174,6 @@
             backSlide.setAttribute('data-label', '裏表紙');
             wrapper.appendChild(backSlide);
         } else {
-            // 💻PC：1枚ずつの見開きスライドとして生成
             for (let i = 1; i <= totalPages; i++) {
                 const slide = document.createElement('div');
                 slide.setAttribute('data-pages', JSON.stringify([i]));
