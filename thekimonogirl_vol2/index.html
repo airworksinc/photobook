@@ -13,7 +13,8 @@
         
         /* コンテナの横幅をしっかり広げて見開きに最適化 */
         .swiper { width: 100%; max-width: 1000px; height: 72vh; max-height: 560px; background: rgba(26, 26, 26, 0.85); }
-        .swiper-slide { display: flex; justify-content: center; align-items: center; background: rgba(26, 26, 26, 0.85); width: 100% !important; gap: 0; }
+        /* flex-direction: row-reverse にすることでRTL環境下でのCanvasの左右固着を完全リセット */
+        .swiper-slide { display: flex; justify-content: center; align-items: center; background: rgba(26, 26, 26, 0.85); width: 100% !important; gap: 0; flex-direction: row-reverse; }
         
         /* PC表示で行き別れや縮小が起きないよう横幅100%・縦100%で綺麗に引き伸ばす設定 */
         .swiper-slide canvas { width: auto; height: auto; max-width: 50%; max-height: 100%; object-fit: contain; box-shadow: 0 8px 20px rgba(0,0,0,0.4); background: rgba(26, 26, 26, 0.85); }
@@ -94,7 +95,7 @@
         return window.innerWidth < 768;
     }
 
-    // 各キャンバスを生成して格納（左右がズレないよう順番にアペンド）
+    // ⭕【最適化】RTL環境の並び順バグを完全に修正するアペンドロジック
     async function renderPageToCanvas(pageNum, container) {
         if (container.querySelector(`[data-page="${pageNum}"]`)) return;
 
@@ -109,23 +110,21 @@
 
         await page.render({ canvasContext: context, viewport: viewport }).promise;
         
-        // ページのインデックス順を正しく並び替えて挿入
+        // ページ番号の大小を判定し、常に[左側が大きな数字、右側が小さな数字]になるように強制ソートしてアペンド
         const pagesInSlide = JSON.parse(container.getAttribute('data-pages'));
-        if (pagesInSlide.length === 2 && pageNum === pagesInSlide[1]) {
+        if (pagesInSlide.length === 2 && pageNum === pagesInSlide[0]) {
             container.insertBefore(canvas, container.firstChild);
         } else {
             container.appendChild(canvas);
         }
     }
 
-    // どんなデータ形式であっても、プログラム側で絶対に「表紙」➔「見開き」➔「裏表紙」に切り分けるロジック
     function buildSlides() {
         wrapper.innerHTML = '';
         const totalPages = pdfDoc.numPages;
         const isMobile = checkIsMobile();
 
         if (isMobile) {
-            // モバイルでは全画面1ページ切り替え
             for (let i = 1; i <= totalPages; i++) {
                 const slide = document.createElement('div');
                 slide.className = 'swiper-slide single-page';
@@ -136,14 +135,12 @@
                 wrapper.appendChild(slide);
             }
         } else {
-            // PC表示：1ページ目は「表紙（単一）」
             const coverSlide = document.createElement('div');
             coverSlide.className = 'swiper-slide single-page';
             coverSlide.setAttribute('data-pages', JSON.stringify([1]));
             coverSlide.setAttribute('data-label', '表紙');
             wrapper.appendChild(coverSlide);
 
-            // 2ページ目以降：2面見開きを強制セット
             for (let i = 2; i < totalPages; i += 2) {
                 const pairSlide = document.createElement('div');
                 pairSlide.className = 'swiper-slide';
@@ -152,7 +149,6 @@
                 wrapper.appendChild(pairSlide);
             }
 
-            // 最終奇数ページがあれば「裏表紙（単一）」としてセット
             if (totalPages % 2 === 0) {
                 const backSlide = document.createElement('div');
                 backSlide.className = 'swiper-slide single-page';
