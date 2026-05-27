@@ -11,11 +11,10 @@
         body, html { width: 100%; height: 100%; background: rgba(26, 26, 26, 0.85); overflow: hidden; font-family: -apple-system, sans-serif; }
         .viewer-container { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 10px; gap: 12px; }
         
-        /* 見開き合体PDFの黄金比率にコンテナ幅を最適化 */
         .swiper { width: 100%; max-width: 950px; height: 68vh; max-height: 520px; background: rgba(26, 26, 26, 0.85); }
-        .swiper-slide { display: flex; justify-content: center; align-items: center; background: rgba(26, 26, 26, 0.85); width: 100% !important; overflow: hidden; }
+        .swiper-slide { display: flex; justify-content: center; align-items: center; background: rgba(26, 26, 26, 0.85); width: 100% !important; }
         
-        /* PCでは合体見開き画像をそのまま1枚で100%綺麗に収める */
+        /* CSSは極めてシンプルに。画像は常にコンテナに100%フィットさせます */
         .swiper-slide canvas { max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 8px 20px rgba(0,0,0,0.4); background: rgba(26, 26, 26, 0.85); }
         
         /* 表紙・裏表紙の単一縦長ページがPCで横に広がりすぎるのを防御 */
@@ -53,16 +52,9 @@
         .thumb-box.active { border-color: #c8a97e; box-shadow: 0 0 8px rgba(200,169,126,0.5); }
         .thumb-box canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
 
-        /* 📱スマホ表示の時だけの空間ハック（横長見開き画像を半分に割って見せる魔法のCSS） */
         @media (max-width: 767px) {
             .swiper { height: 55vh; }
-            .swiper-slide canvas { max-width: 200% !important; width: 200% !important; object-fit: cover !important; }
-            /* 右半分（偶数P）を映す */
-            .swiper-slide.view-right canvas { object-position: right center !important; }
-            /* 左半分（奇数P）を映す */
-            .swiper-slide.view-left canvas { object-position: left center !important; }
-            /* 表紙・裏表紙はスマホでもそのまま標準表示 */
-            .swiper-slide.single-page canvas { max-width: 100% !important; width: auto !important; object-fit: contain !important; }
+            .swiper-slide canvas { max-width: 100% !important; width: auto !important; object-fit: contain !important; }
             .swiper-button-next { right: 5px; }
             .swiper-button-prev { left: 5px; }
             #thumbs-container { max-width: 100%; }
@@ -100,70 +92,103 @@
         return window.innerWidth < 768;
     }
 
-    // 🚀【スピード最優先】見開き合体データなので、解像度スケールは1.2（スマホ1.0）で超高速レンダリング
+    // ⭕【コアロジック刷新】横長見開きPDFを、スマホ表示の時だけプログラム側で物理的に真っ二つにカットして描画する処理
     async function renderPageToCanvas(pageNum, container) {
-        if (container.querySelector(`[data-page="${pageNum}"]`)) return;
+        const side = container.getAttribute('data-side') || 'both'; // 'right', 'left', 'both'
+        const cacheKey = `${pageNum}-${side}`;
+        if (container.querySelector(`[data-render-key="${cacheKey}"]`)) return;
 
         const page = await pdfDoc.getPage(pageNum);
-        const canvas = document.createElement('canvas');
-        canvas.setAttribute('data-page', pageNum);
-        const context = canvas.getContext('2d');
         
+        // 処理速度向上のためスケールは1.2（モバイルは1.0）
         const isMobile = checkIsMobile();
         const optimizedScale = isMobile ? 1.0 : 1.2;
-        
-        const viewport = page.getViewport({ scale: optimizedScale }); 
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
+        const viewport = page.getViewport({ scale: optimizedScale });
 
-        await page.render({ canvasContext: context, viewport: viewport }).promise;
-        container.appendChild(canvas);
+        // 一時的に裏側でPDFのオリジナルサイズを描画するための隠しCanvasを作成
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = viewport.width;
+        tempCanvas.height = viewport.height;
+        const tempContext = tempCanvas.getContext('2d');
+        await page.render({ canvasContext: tempContext, viewport: viewport }).promise;
+
+        // 実際に画面に配置するCanvasを作成
+        const finalCanvas = document.createElement('canvas');
+        finalCanvas.setAttribute('data-render-key', cacheKey);
+        const finalContext = finalCanvas.getContext('2d');
+
+        if (side === 'both') {
+            // PC表示：そのまま全体をコピー
+            finalCanvas.width = viewport.width;
+            finalCanvas.height = viewport.height;
+            finalContext.drawImage(tempCanvas, 0, 0);
+        } else {
+            // スマホ表示：横幅を半分にクリップして転写
+            const halfWidth = viewport.width / 2;
+            finalCanvas.width = halfWidth;
+            finalCanvas.height = viewport.height;
+
+            if (side === 'right') {
+                // 右半分（偶数P）を切り出して転写
+                finalContext.drawImage(tempCanvas, halfWidth, 0, halfWidth, viewport.height, 0, 0, halfWidth, viewport.height);
+            } else if (side === 'left') {
+                // 左半分（奇数P）を切り出して転写
+                finalContext.drawImage(tempCanvas, 0, 0, halfWidth, viewport.height, 0, 0, halfWidth, viewport.height);
+            }
+        }
+
+        container.appendChild(finalCanvas);
     }
 
-    // 見開き合体形式のPDFを、PC（そのまま1枚）とスマホ（2分割）で動的に割り振る新ビルドシステム
     function buildSlides() {
         wrapper.innerHTML = '';
-        const totalPages = pdfDoc.numPages; // 実際は21ページ
+        const totalPages = pdfDoc.numPages;
         const isMobile = checkIsMobile();
 
         if (isMobile) {
-            // 📱スマホ：人間がめくる実質の本のページ（全40ページ分）にバラしてスライドを生成
-            // 1スライド目：表紙（PDFの1ページ目）
+            // 📱スマホ：見開きデータを「右半分」「左半分」の独立した箱として完全に分解して生成
+            // 表紙（1ページ目）
             let slide = document.createElement('div');
             slide.className = 'swiper-slide single-page';
             slide.setAttribute('data-pages', JSON.stringify([1]));
+            slide.setAttribute('data-side', 'both');
             slide.setAttribute('data-label', '表紙');
             wrapper.appendChild(slide);
 
-            // 中身：PDFの2〜20ページ目を、それぞれ「右半分」「左半分」の2スライドに分離
+            // 中身（2〜20ページ目）
             for (let i = 2; i < totalPages; i++) {
-                const pageStart = (i - 1) * 2; // 実際のページ番号を計算
+                const pageStart = (i - 1) * 2;
                 
-                // 右半分（偶数P）
+                // 右側（偶数P）用の独立したスライド
                 let slideR = document.createElement('div');
-                slideR.className = 'swiper-slide view-right';
+                slideR.className = 'swiper-slide';
                 slideR.setAttribute('data-pages', JSON.stringify([i]));
+                slideR.setAttribute('data-side', 'right');
                 slideR.setAttribute('data-label', `${pageStart}P`);
                 wrapper.appendChild(slideR);
 
-                // 左半分（奇数P）
+                // 左側（奇数P）用の独立したスライド
                 let slideL = document.createElement('div');
-                slideL.className = 'swiper-slide view-left';
+                slideL.className = 'swiper-slide';
                 slideL.setAttribute('data-pages', JSON.stringify([i]));
+                slideL.setAttribute('data-side', 'left');
                 slideL.setAttribute('data-label', `${pageStart + 1}P`);
                 wrapper.appendChild(slideL);
             }
 
-            // 最終スライド：裏表紙（PDFの21ページ目）
+            // 裏表紙（21ページ目）
             let backSlide = document.createElement('div');
             backSlide.className = 'swiper-slide single-page';
             backSlide.setAttribute('data-pages', JSON.stringify([totalPages]));
+            backSlide.setAttribute('data-side', 'both');
             backSlide.setAttribute('data-label', '裏表紙');
             wrapper.appendChild(backSlide);
         } else {
-            // 💻PC：PDFのページをそのまま素直に1枚ずつスライド化
+            // 💻PC：1枚ずつの見開きスライドとして生成
             for (let i = 1; i <= totalPages; i++) {
                 const slide = document.createElement('div');
+                slide.setAttribute('data-pages', JSON.stringify([i]));
+                slide.setAttribute('data-side', 'both');
                 if (i === 1) {
                     slide.className = 'swiper-slide single-page';
                     slide.setAttribute('data-label', '表紙');
@@ -175,7 +200,6 @@
                     const pageStart = (i - 1) * 2;
                     slide.setAttribute('data-label', `${pageStart}-${pageStart + 1}P`);
                 }
-                slide.setAttribute('data-pages', JSON.stringify([i]));
                 wrapper.appendChild(slide);
             }
         }
@@ -289,7 +313,6 @@
     pdfjsLib.getDocument(pdfUrl).promise.then(async function(pdf) {
         pdfDoc = pdf;
         
-        // 人間が読む本の実質ページ数を計算して表示（見開き19枚×2 + 表紙・裏表紙2枚 = 40P）
         const actualTotalPages = (pdf.numPages - 2) * 2 + 2;
         document.getElementById('total-pages').textContent = actualTotalPages + "P";
 
