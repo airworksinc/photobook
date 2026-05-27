@@ -56,11 +56,16 @@
         @media (max-width: 767px) {
             .swiper { height: 55vh; }
             
-            /* 中身（カット済み画像）も表紙も、スマホのコンテナ高さの限界（100%）まで絶対に引き伸ばす指定 */
-            .swiper-slide canvas { width: auto !important; height: 100% !important; max-width: 100% !important; max-height: 100% !important; object-fit: contain !important; }
+            /* ⭕【完全解決の鍵】指定を限界まで厳格化し、Canvas要素自体の属性をすべて上書きして高さを100%に引き伸ばします */
+            .swiper-slide canvas[data-render-key] {
+                width: auto !important;
+                height: 100% !important;
+                max-width: 100% !important;
+                max-height: 100% !important;
+                object-fit: contain !important;
+            }
             
-            /* ⭕【バグ修正】スマホの表紙・裏表紙の箱自体が横に潰れないよう、フレックス配置を調整 */
-            .swiper-slide.single-page { display: flex !important; justify-content: center !important; align-items: center !important; width: 100% !important; height: 100% !important; }
+            .swiper-slide { display: flex !important; justify-content: center !important; align-items: center !important; width: 100% !important; height: 100% !important; }
             
             .swiper-button-next { right: 5px; }
             .swiper-button-prev { left: 5px; }
