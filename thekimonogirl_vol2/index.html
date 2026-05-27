@@ -13,8 +13,8 @@
         
         .swiper { width: 100%; max-width: 1000px; height: 72vh; max-height: 560px; background: rgba(26, 26, 26, 0.85); }
         
-        /* ⭕【vol.2専用変更】flex-direction を row-reverse にして並び順のベースを反転 */
-        .swiper-slide { display: flex; justify-content: center; align-items: center; background: rgba(26, 26, 26, 0.85); width: 100% !important; gap: 0; flex-direction: row-reverse; }
+        /* 左右を本本来の並びにするため、row（通常の右詰め環境）に標準化します */
+        .swiper-slide { display: flex; justify-content: center; align-items: center; background: rgba(26, 26, 26, 0.85); width: 100% !important; gap: 0; flex-direction: row; }
         
         .swiper-slide canvas { width: auto; height: auto; max-width: 50%; max-height: 100%; object-fit: contain; box-shadow: 0 8px 20px rgba(0,0,0,0.4); background: rgba(26, 26, 26, 0.85); }
         
@@ -101,7 +101,11 @@
         canvas.setAttribute('data-page', pageNum);
         const context = canvas.getContext('2d');
         
-        const viewport = page.getViewport({ scale: 1.8 }); 
+        // 🚀【スピード改善】解像度の生成スケールを1.8から1.2（スマホは1.0）へ軽量化
+        const isMobile = checkIsMobile();
+        const optimizedScale = isMobile ? 1.0 : 1.2; 
+        
+        const viewport = page.getViewport({ scale: optimizedScale }); 
         canvas.height = viewport.height;
         canvas.width = viewport.width;
 
@@ -112,7 +116,7 @@
         if (existingCanvas) {
             const existingPageNum = parseInt(existingCanvas.getAttribute('data-page'), 10);
             
-            // ⭕【vol.2専用変更】不等号を「>」に反転し、逆向きのデータ順をここで相殺・補正します
+            // ⭕【vol.2データ最適化】逆向きデータ構造の特性に合わせ、ページが大きければ手前にねじ込む
             if (pageNum > existingPageNum) {
                 container.insertBefore(canvas, existingCanvas);
             } else {
@@ -183,6 +187,7 @@
                 }
             };
 
+            // ⚠️【ブロッキング対策】スマホフリーズを防ぐため、この時差タイマーは意図して残します
             setTimeout(async () => {
                 try {
                     const page = await pdfDoc.getPage(i);
@@ -214,14 +219,14 @@
         });
     }
 
-    // ── 【新規追加】全スライドの初期配置を反転環境に対応させるための補正ロジック ──
+    // ⭕ 描画完了後に左右のページ番号の「手前・奥」を物理的に正位置（右が若番、左が老番）へ固定するロジック
     function fixVol2SlideOrder(swiperInstance) {
         swiperInstance.slides.forEach(slide => {
             const canvases = Array.from(slide.querySelectorAll('canvas'));
             if (canvases.length === 2) {
                 const p1 = parseInt(canvases[0].getAttribute('data-page'), 10);
                 const p2 = parseInt(canvases[1].getAttribute('data-page'), 10);
-                if (p1 < p2) {
+                if (p1 > p2) {
                     slide.insertBefore(canvases[1], canvases[0]);
                 }
             }
@@ -277,7 +282,7 @@
                 for (const pNum of pages) {
                     await renderPageToCanvas(pNum, slide);
                 }
-                fixVol2SlideOrder(swiperInstance); // 描画後に並びをダブルチェック
+                fixVol2SlideOrder(swiperInstance); // スライドごとの最終並び順を完全同期
                 swiperInstance.update(); 
             }
         }
